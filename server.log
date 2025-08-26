@@ -1,0 +1,27 @@
+⚠️ OpenAI API key not found, using pattern-based extraction
+⚠️ OpenAI API key not found, using pattern-based extraction
+(node:29342) [DEP0040] DeprecationWarning: The `punycode` module is deprecated. Please use a userland alternative instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+Database connection established successfully.
+Database models synchronized.
+Initializing scheduler...
+🚀 Initializing Enhanced Scraping Service...
+🕷️ Initializing Scrapy Service...
+📡 HTTP attempt 1 for https://httpbin.org/html
+✅ Scrapy Service initialized successfully
+✅ Enhanced Scraping Service initialized successfully
+Found 3 active scraping configurations
+Scheduled scraping job for config Hotel Projects (f81b61c4-2ae4-4359-bcca-706e11df7d2a) with frequency: daily
+Scheduled scraping job for config Test Scrape (d09dc34e-a34d-4a37-a072-1b67739a79a3) with frequency: daily
+Scheduled scraping job for config Boutique Hotel Projects (41b5db8c-63bf-45a7-81fc-8e98b49e177f) with frequency: daily
+Scheduler service initialized
+Server running on port 5001
+Environment: undefined
+Login error: Error: secretOrPrivateKey must have a value
+    at module.exports [as sign] (/Users/jordanzane/Documents/Project Lead Scheduler/node_modules/jsonwebtoken/sign.js:111:20)
+    at /Users/jordanzane/Documents/Project Lead Scheduler/server/routes/auth.js:118:23
+    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+Login error: Error: secretOrPrivateKey must have a value
+    at module.exports [as sign] (/Users/jordanzane/Documents/Project Lead Scheduler/node_modules/jsonwebtoken/sign.js:111:20)
+    at /Users/jordanzane/Documents/Project Lead Scheduler/server/routes/auth.js:118:23
+    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
