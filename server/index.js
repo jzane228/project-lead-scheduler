@@ -19,11 +19,14 @@ const industryRoutes = require('./routes/industries');
 const tagsRoutes = require('./routes/tags');
 const settingsRoutes = require('./routes/settings');
 const columnsRoutes = require('./routes/columns');
+const contactsRoutes = require('./routes/contacts');
 
 // Import database connection
 const { sequelize } = require('./models');
 // Import services
 const SchedulerService = require('./services/schedulerService');
+// Import database initialization
+const initializeDatabase = require('./databaseInit');
 
 // Security middleware
 app.use(helmet());
@@ -100,6 +103,7 @@ app.use('/api/industries', industryRoutes);
 app.use('/api/tags', tagsRoutes);
 app.use('/api/settings', settingsRoutes);
 app.use('/api/columns', columnsRoutes);
+app.use('/api/contacts', contactsRoutes);
 app.use('/api/analytics', require('./routes/analytics'));
 
 // Error handling middleware
@@ -171,14 +175,9 @@ const startServer = async () => {
     await sequelize.authenticate();
     console.log('Database connection established successfully.');
 
-    // Sync database models (only in development, not in production)
-    if (process.env.NODE_ENV !== 'production') {
-      console.log('Syncing database models...');
-      await sequelize.sync({ alter: true });
-      console.log('Database models synchronized.');
-    } else {
-      console.log('Production environment: skipping database sync');
-    }
+    // Initialize database tables and default data
+    console.log('Initializing database tables and default data...');
+    await initializeDatabase();
 
     // Seed industries data
     console.log('Seeding industries data...');

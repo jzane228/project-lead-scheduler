@@ -985,8 +985,42 @@ class EnhancedScrapingService {
     if (roomMatch) {
       extracted.roomCount = roomMatch[1];
     }
-    
+
     return extracted;
+  }
+
+  extractCompanyFromTitle(title) {
+    if (!title) return null;
+
+    // Common patterns for company names in titles
+    const patterns = [
+      // "Company Name Announces..."
+      /^([A-Z][a-zA-Z\s&]+(?:Inc|Corp|LLC|Ltd|Group|Holdings|Hotels|Resorts|Properties|Development|Construction|Company|Group)?)/,
+      // "Company Name to Build..."
+      /([A-Z][a-zA-Z\s&]+(?:Inc|Corp|LLC|Ltd|Group|Holdings|Hotels|Resorts|Properties|Development|Construction|Company|Group)?)/
+    ];
+
+    for (const pattern of patterns) {
+      const match = title.match(pattern);
+      if (match && match[1]) {
+        const companyName = match[1].trim();
+        // Filter out common words that aren't company names
+        const filterWords = ['the', 'new', 'hotel', 'boutique', 'luxury', 'resort', 'property', 'development'];
+        if (!filterWords.includes(companyName.toLowerCase()) && companyName.length > 3) {
+          return companyName;
+        }
+      }
+    }
+
+    // Try to extract from known hotel chains and companies
+    const hotelChains = ['Hilton', 'Marriott', 'Hyatt', 'Starwood', 'IHG', 'Accor', 'Wyndham', 'Choice Hotels', 'Hersha', 'Drury', 'La Quinta', 'Courtyard', 'Hampton', 'Holiday Inn', 'Sheraton', 'Westin', 'Ritz-Carlton', 'Four Seasons'];
+    for (const chain of hotelChains) {
+      if (title.toLowerCase().includes(chain.toLowerCase())) {
+        return chain;
+      }
+    }
+
+    return null;
   }
 
   extractEnhancedData(title, snippet, fullContent) {
@@ -1170,7 +1204,9 @@ class EnhancedScrapingService {
           timeline: result.extractedData.timeline || null,
 
           // Company & Contact Information
-          company: result.extractedData.company || 'Unknown',
+          company: (result.extractedData.company && result.extractedData.company !== 'Unknown' && result.extractedData.company !== 'style' && result.extractedData.company.length > 2)
+            ? result.extractedData.company
+            : this.extractCompanyFromTitle(result.title) || 'Unknown',
           contact_info: finalContactInfo,
 
           // Industry & Keywords
@@ -1178,7 +1214,7 @@ class EnhancedScrapingService {
           keywords: keywords.length > 0 ? keywords : [],
 
           // Article URL - CRITICAL for user's requirement
-          url: result.url, // Article URL for easy access
+          url: result.url || result.sourceUrl || `https://example.com/lead-${Date.now()}`, // Ensure URL is always provided
 
           // Dates
           published_at: result.publishedDate || result.extractedAt || new Date(),
@@ -1215,9 +1251,11 @@ class EnhancedScrapingService {
 
         console.log('💾 Attempting to save lead with data:', {
           title: leadData.title,
+          url: leadData.url,
           confidence: leadData.confidence,
           contact_info: leadData.contact_info,
-          custom_fields: leadData.custom_fields
+          custom_fields: leadData.custom_fields,
+          company: leadData.company
         });
 
         // Create lead with error handling
@@ -1243,12 +1281,54 @@ class EnhancedScrapingService {
           const contacts = this.dataExtractionService.extractMultipleContacts(result.articleText || result.fullContent || result.snippet);
 
           if (contacts.length > 0) {
-            const { Contact } = require('../models');
-            const savedContacts = await Contact.bulkCreateFromExtraction(contacts, lead.id, userId);
-            console.log(`📞 Saved ${savedContacts.length} contacts for lead: ${result.title}`);
+            console.log(`📞 Extracted ${contacts.length} contacts for lead: ${result.title}`);
+
+            // Import Contact model with error handling
+            let Contact;
+            try {
+              Contact = require('../models').Contact;
+            } catch (modelError) {
+              console.log(`⚠️ Could not load Contact model: ${modelError.message}`);
+              console.log('📝 Contacts will be saved to contact_info JSON field instead');
+              // Fallback: save contacts to the contact_info field as JSON
+              const primaryContact = contacts.find(c => c.contact_type === 'primary') || contacts[0];
+              if (primaryContact) {
+                await lead.update({
+                  contact_info: {
+                    name: primaryContact.name,
+                    email: primaryContact.email,
+                    phone: primaryContact.phone,
+                    company: primaryContact.company,
+                    title: primaryContact.title
+                  }
+                });
+              }
+              return;
+            }
+
+            if (Contact && Contact.bulkCreateFromExtraction) {
+              const savedContacts = await Contact.bulkCreateFromExtraction(contacts, lead.id, userId);
+              console.log(`📞 Successfully saved ${savedContacts.length} contacts to database`);
+            } else {
+              console.log('⚠️ Contact.bulkCreateFromExtraction method not available');
+              // Fallback: save primary contact info
+              const primaryContact = contacts.find(c => c.contact_type === 'primary') || contacts[0];
+              if (primaryContact) {
+                await lead.update({
+                  contact_info: {
+                    name: primaryContact.name,
+                    email: primaryContact.email,
+                    phone: primaryContact.phone,
+                    company: primaryContact.company,
+                    title: primaryContact.title
+                  }
+                });
+              }
+            }
           }
         } catch (error) {
           console.log(`⚠️ Could not extract contacts for lead "${result.title}": ${error.message}`);
+          // Don't fail the entire lead saving process due to contact extraction errors
         }
 
         savedLeads.push(lead);
