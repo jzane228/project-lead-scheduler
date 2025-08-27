@@ -48,18 +48,24 @@ app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 // Static files
 app.use('/uploads', express.static('uploads'));
 
-// Health check endpoint
+// Health check endpoint (no database required)
 app.get('/health', (req, res) => {
-  res.json({ status: 'OK', timestamp: new Date().toISOString() });
-});
-
-// Railway health check endpoint
-app.get('/api/health', (req, res) => {
-  res.status(200).json({ 
-    status: 'healthy', 
+  res.json({
+    status: 'OK',
     timestamp: new Date().toISOString(),
     uptime: process.uptime(),
     environment: process.env.NODE_ENV || 'development'
+  });
+});
+
+// Railway health check endpoint (no database required)
+app.get('/api/health', (req, res) => {
+  res.status(200).json({
+    status: 'healthy',
+    timestamp: new Date().toISOString(),
+    uptime: process.uptime(),
+    environment: process.env.NODE_ENV || 'development',
+    version: '1.0.0'
   });
 });
 
@@ -97,10 +103,17 @@ const schedulerService = new SchedulerService();
 const startServer = async () => {
   try {
     // Test database connection
+    console.log('Attempting database connection...');
+    console.log(`DB_HOST: ${process.env.DB_HOST}`);
+    console.log(`DB_PORT: ${process.env.DB_PORT}`);
+    console.log(`DB_NAME: ${process.env.DB_NAME}`);
+    console.log(`DB_USER: ${process.env.DB_USER ? '***' : 'NOT SET'}`);
+
     await sequelize.authenticate();
     console.log('Database connection established successfully.');
 
     // Sync database models
+    console.log('Syncing database models...');
     await sequelize.sync({ alter: true });
     console.log('Database models synchronized.');
 
@@ -117,17 +130,17 @@ const startServer = async () => {
     // Graceful shutdown
     const gracefulShutdown = async (signal) => {
       console.log(`\n${signal} received, shutting down gracefully`);
-      
+
       server.close(async () => {
         console.log('HTTP server closed');
-        
+
         try {
           await schedulerService.close();
           console.log('Scheduler service closed');
-          
+
           await sequelize.close();
           console.log('Database connection closed');
-          
+
           process.exit(0);
         } catch (error) {
           console.error('Error during shutdown:', error);
@@ -141,7 +154,19 @@ const startServer = async () => {
 
   } catch (error) {
     console.error('Failed to start server:', error);
-    process.exit(1);
+    console.error('Error details:', error.message);
+    console.error('Stack trace:', error.stack);
+
+    // Don't exit in production, try to start server anyway
+    if (process.env.NODE_ENV === 'production') {
+      console.log('Attempting to start server without database connection...');
+      const server = app.listen(PORT, () => {
+        console.log(`Server running on port ${PORT} (without database)`);
+        console.log(`Environment: ${process.env.NODE_ENV}`);
+      });
+    } else {
+      process.exit(1);
+    }
   }
 };
 
