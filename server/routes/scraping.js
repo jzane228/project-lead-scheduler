@@ -599,6 +599,89 @@ router.get('/engine-status', auth, async (req, res) => {
   }
 });
 
+// @route   POST /api/scraping/toggle-deepseek
+// @desc    Enable/disable Deepseek AI for cost control
+// @access  Private
+router.post('/toggle-deepseek', auth, async (req, res) => {
+  try {
+    const { enabled } = req.body;
+
+    if (typeof enabled !== 'boolean') {
+      return res.status(400).json({
+        error: 'enabled must be a boolean value',
+        usage: 'POST /api/scraping/toggle-deepseek with body: { "enabled": true }'
+      });
+    }
+
+    // Update environment variable (this will persist until server restart)
+    process.env.DEEPSEEK_ENABLED = enabled.toString();
+
+    // Update the service instances
+    const { EnhancedScrapingService } = require('../services/enhancedScrapingService');
+    const { DataExtractionService } = require('../services/dataExtractionService');
+
+    // Create temporary instances to update their status
+    const scrapingService = new EnhancedScrapingService();
+    const extractionService = new DataExtractionService();
+
+    if (enabled) {
+      scrapingService.deepseekApiKey = process.env.DEEPSEEK_API_KEY;
+      extractionService.deepseekApiKey = process.env.DEEPSEEK_API_KEY;
+      console.log('✅ DEEPSEEK AI ENABLED - Advanced analysis will incur costs');
+    } else {
+      scrapingService.deepseekApiKey = null;
+      extractionService.deepseekApiKey = null;
+      console.log('🚫 DEEPSEEK AI DISABLED - Pattern-based extraction only');
+    }
+
+    res.json({
+      success: true,
+      deepseekEnabled: enabled,
+      message: enabled
+        ? 'Deepseek AI enabled - advanced analysis will incur costs'
+        : 'Deepseek AI disabled - using pattern-based extraction only',
+      warning: enabled
+        ? '⚠️ WARNING: Deepseek API calls will incur costs. Ensure you have sufficient balance.'
+        : '✅ Cost control active - no AI costs will be incurred',
+      timestamp: new Date().toISOString()
+    });
+  } catch (error) {
+    console.error('❌ Deepseek toggle error:', error);
+    res.status(500).json({
+      error: 'Failed to toggle Deepseek',
+      details: error.message
+    });
+  }
+});
+
+// @route   GET /api/scraping/deepseek-status
+// @desc    Get current Deepseek AI status
+// @access  Private
+router.get('/deepseek-status', auth, async (req, res) => {
+  try {
+    const apiKeyExists = !!process.env.DEEPSEEK_API_KEY;
+    const currentlyEnabled = process.env.DEEPSEEK_ENABLED === 'true';
+
+    res.json({
+      success: true,
+      deepseekAvailable: apiKeyExists,
+      deepseekEnabled: currentlyEnabled,
+      apiKeyConfigured: apiKeyExists,
+      status: currentlyEnabled ? 'enabled' : 'disabled',
+      message: currentlyEnabled
+        ? 'Deepseek AI is enabled and will incur costs'
+        : 'Deepseek AI is disabled - cost control active',
+      timestamp: new Date().toISOString()
+    });
+  } catch (error) {
+    console.error('❌ Deepseek status error:', error);
+    res.status(500).json({
+      error: 'Failed to get Deepseek status',
+      details: error.message
+    });
+  }
+});
+
 // @route   POST /api/scraping/run-tests
 // @desc    Run comprehensive scraping system tests
 // @access  Private
