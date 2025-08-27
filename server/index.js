@@ -28,7 +28,7 @@ const SchedulerService = require('./services/schedulerService');
 app.use(helmet());
 app.use(cors({
   origin: process.env.NODE_ENV === 'production' 
-    ? ['https://yourdomain.com'] 
+    ? [process.env.CORS_ORIGIN || '*']  // Allow from environment variable or all origins
     : ['http://localhost:3000'],
   credentials: true
 }));
