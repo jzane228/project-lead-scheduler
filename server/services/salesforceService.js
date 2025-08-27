@@ -677,7 +677,7 @@ class SalesforceService {
       }
 
       if (Object.keys(updateData).length > 0) {
-        updateData.salesforce_synced_at = new Date();
+        // updateData.salesforce_synced_at = new Date(); // Field doesn't exist in Lead model
         await Lead.update(updateData, { where: { id: leadId } });
       }
     } catch (error) {
@@ -696,7 +696,7 @@ class SalesforceService {
         salesforceAccountId: lead.salesforce_account_id,
         salesforceContactId: lead.salesforce_contact_id,
         salesforceOpportunityId: lead.salesforce_opportunity_id,
-        syncedAt: lead.salesforce_synced_at,
+        syncedAt: null, // salesforce_synced_at field doesn't exist in Lead model
         isSynced: !!(lead.salesforce_lead_id || lead.salesforce_account_id || lead.salesforce_contact_id || lead.salesforce_opportunity_id)
       };
     } catch (error) {
@@ -715,7 +715,7 @@ class SalesforceService {
             [require('sequelize').Op.gte]: this.getDateRange(timeRange).startDate
           }
         },
-        attributes: ['id', 'status', 'budget', 'salesforce_synced_at']
+        attributes: ['id', 'status', 'budget']
       });
 
       const metrics = {

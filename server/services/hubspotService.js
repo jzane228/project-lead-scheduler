@@ -519,7 +519,7 @@ class HubSpotService {
       }
 
       if (Object.keys(updateData).length > 0) {
-        updateData.hubspot_synced_at = new Date();
+        // updateData.hubspot_synced_at = new Date(); // Field doesn't exist in Lead model
         await Lead.update(updateData, { where: { id: leadId } });
       }
     } catch (error) {
@@ -537,7 +537,7 @@ class HubSpotService {
         hubspotContactId: lead.hubspot_contact_id,
         hubspotCompanyId: lead.hubspot_company_id,
         hubspotDealId: lead.hubspot_deal_id,
-        syncedAt: lead.hubspot_synced_at,
+        syncedAt: null, // hubspot_synced_at field doesn't exist in Lead model
         isSynced: !!(lead.hubspot_contact_id || lead.hubspot_company_id || lead.hubspot_deal_id)
       };
     } catch (error) {
@@ -556,7 +556,7 @@ class HubSpotService {
             [require('sequelize').Op.gte]: this.getDateRange(timeRange).startDate
           }
         },
-        attributes: ['id', 'status', 'budget', 'hubspot_synced_at']
+        attributes: ['id', 'status', 'budget']
       });
 
       const metrics = {
