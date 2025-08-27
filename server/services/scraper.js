@@ -205,13 +205,18 @@ class WebScraper {
       // Look for email patterns
       const emailMatch = content.text.match(/\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b/);
       if (emailMatch) {
-        extracted.contactEmail = emailMatch[0];
+        extracted.contact_info = emailMatch[0];
       }
 
       // Look for phone patterns
       const phoneMatch = content.text.match(/(\+\d{1,3}[-.\s]?)?\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4}/);
       if (phoneMatch) {
-        extracted.contactPhone = phoneMatch[0];
+        // Combine email and phone into contact_info if both exist
+        if (extracted.contact_info) {
+          extracted.contact_info += ` | Phone: ${phoneMatch[0]}`;
+        } else {
+          extracted.contact_info = `Phone: ${phoneMatch[0]}`;
+        }
       }
     }
 
@@ -262,19 +267,17 @@ class WebScraper {
           title: content.title || 'Untitled',
           description: content.meta.description || content.text.substring(0, 500),
           company: extractedData.company,
-          contactName: extractedData.contactName,
-          contactEmail: extractedData.contactEmail,
-          contactPhone: extractedData.contactPhone,
+          contact_info: extractedData.contact_info,
           budget: extractedData.budget,
-          budgetRange: extractedData.budgetRange,
           timeline: extractedData.timeline,
-          requirements: extractedData.requirements,
-          sourceUrl: url,
-          sourceTitle: content.title,
-          publishedDate: content.meta.publishedTime ? new Date(content.meta.publishedTime) : null,
-          scrapedDate: new Date(),
-          extractedData: extractedData,
-          UserId: userId
+          industry_type: extractedData.industryType,
+          source_type: 'scraped',
+          url: url,
+          published_at: content.meta.publishedTime ? new Date(content.meta.publishedTime) : null,
+          score: extractedData.score || 0,
+          confidence: extractedData.confidence || 0,
+          extraction_method: 'ai',
+          user_id: userId
         });
 
         results.push(lead);

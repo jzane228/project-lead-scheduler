@@ -536,7 +536,17 @@ class AnalyticsService {
   async getROIMetrics(userId, timeRange) {
     // This would calculate actual ROI based on subscription costs vs. lead value
     const user = await User.findByPk(userId);
-    const subscriptionCost = this.getSubscriptionCost(user.subscription_tier);
+    if (!user) {
+      return {
+        subscriptionCost: '0.00',
+        totalLeadValue: '0.00',
+        roi: '0.00',
+        costPerLead: '0.00',
+        valuePerLead: '0.00'
+      };
+    }
+    
+    const subscriptionCost = this.getSubscriptionCost(user.subscription_tier || 'free');
     
     const leads = await Lead.findAll({
       where: { user_id: userId },
@@ -624,7 +634,6 @@ class AnalyticsService {
     const funnel = {
       new: statusCounts.new || 0,
       qualified: statusCounts.qualified || 0,
-      proposal: statusCounts.proposal || 0,
       proposal: statusCounts.proposal || 0,
       won: statusCounts.won || 0
     };

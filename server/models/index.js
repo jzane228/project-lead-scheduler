@@ -58,7 +58,7 @@ User.hasMany(LeadSource, { foreignKey: 'user_id', as: 'leadSources' });
 LeadSource.belongsTo(User, { foreignKey: 'user_id', as: 'user' });
 
 User.hasMany(ExportSchedule, { foreignKey: 'user_id', as: 'exportSchedules' });
-ExportSchedule.belongsTo(User, { foreignKey: 'user_id', as: 'exportSchedules' });
+ExportSchedule.belongsTo(User, { foreignKey: 'user_id', as: 'user' });
 
 User.hasMany(CRMIntegration, { foreignKey: 'user_id', as: 'crmIntegrations' });
 CRMIntegration.belongsTo(User, { foreignKey: 'user_id', as: 'user' });

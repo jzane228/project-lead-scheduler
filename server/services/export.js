@@ -60,14 +60,11 @@ class ExportService {
     const defaultColumns = [
       'Title',
       'Company',
-      'Contact Name',
-      'Contact Email',
-      'Contact Phone',
+      'Contact Info',
       'Location',
       'Budget',
       'Timeline',
-      'Requirements',
-      'Industry',
+      'Industry Type',
       'Project Type',
       'Status',
       'Priority',
@@ -99,36 +96,30 @@ class ExportService {
             return lead.title;
           case 'company':
             return lead.company;
-          case 'contact name':
-            return lead.contactName;
-          case 'contact email':
-            return lead.contactEmail;
-          case 'contact phone':
-            return lead.contactPhone;
+          case 'contact info':
+            return lead.contact_info;
           case 'location':
             return lead.location;
           case 'budget':
-            return lead.budget ? `$${lead.budget.toLocaleString()}` : lead.getBudgetDisplay();
+            return lead.budget || '';
           case 'timeline':
             return lead.timeline;
-          case 'requirements':
-            return lead.requirements;
-          case 'industry':
-            return lead.industry;
+          case 'industry type':
+            return lead.industry_type;
           case 'project type':
-            return lead.projectType;
+            return lead.project_type;
           case 'status':
             return lead.status;
           case 'priority':
             return lead.priority;
           case 'confidence':
-            return `${lead.confidence}%`;
+            return lead.confidence || '';
           case 'source url':
-            return lead.sourceUrl;
+            return lead.url;
           case 'scraped date':
-            return lead.scrapedDate.toLocaleDateString();
+            return lead.createdAt ? lead.createdAt.toLocaleDateString() : '';
           case 'tags':
-            return Array.isArray(lead.tags) ? lead.tags.join(', ') : '';
+            return lead.tag_names || '';
           default:
             return lead[col] || '';
         }
