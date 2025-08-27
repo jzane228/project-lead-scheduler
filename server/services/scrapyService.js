@@ -92,19 +92,42 @@ class ScrapyService {
     for (let attempt = 1; attempt <= this.maxRetries; attempt++) {
       try {
         console.log(`📡 HTTP attempt ${attempt} for ${url}`);
-        
+
         const response = await axios.get(url, {
           headers,
           timeout: this.timeout,
           maxRedirects: 5,
-          validateStatus: (status) => status < 400
+          validateStatus: (status) => status < 400,
+          responseType: 'text' // Ensure we get text response
         });
 
-        return this.parseScrapyResponse(response.data, url);
+        // Ensure response.data is a string
+        let htmlContent = response.data;
+        if (typeof htmlContent !== 'string') {
+          if (Buffer.isBuffer(htmlContent)) {
+            htmlContent = htmlContent.toString('utf-8');
+          } else if (htmlContent && typeof htmlContent === 'object') {
+            // Handle cases where axios returns JSON or other objects
+            htmlContent = JSON.stringify(htmlContent);
+          } else {
+            htmlContent = String(htmlContent || '');
+          }
+        }
+
+        // Validate HTML content
+        if (!htmlContent || htmlContent.trim().length === 0) {
+          throw new Error('Empty response from server');
+        }
+
+        if (htmlContent.length < 50) {
+          throw new Error(`Response too short (${htmlContent.length} characters)`);
+        }
+
+        return this.parseScrapyResponse(htmlContent, url);
       } catch (error) {
         lastError = error;
         console.log(`⚠️ Attempt ${attempt} failed: ${error.message}`);
-        
+
         if (attempt < this.maxRetries) {
           // Exponential backoff
           const delay = Math.min(1000 * Math.pow(2, attempt - 1), 10000);
@@ -123,57 +146,91 @@ class ScrapyService {
         throw new Error('Invalid or empty HTML content');
       }
 
+      // Check if this is a redirect or error page
+      if (html.includes('404') || html.includes('Not Found') || html.includes('403')) {
+        throw new Error('Page not found or access denied');
+      }
+
       const $ = cheerio.load(html);
-      
+
       // Remove script and style elements
-      $('script, style, noscript, iframe, nav, footer, header').remove();
-      
-      // Extract main content
-      const mainContent = $('main, article, .content, .post, .entry, .main, .body') || $('body');
-      
-      // Extract title
-      const title = $('title').text().trim() || 
-                   $('h1').first().text().trim() || 
+      $('script, style, noscript, iframe, nav, footer, header, .advertisement, .sidebar').remove();
+
+      // Extract main content with multiple fallback strategies
+      let mainContent = $('main, article, .content, .post, .entry, .main, .body, .article-content, .story-content');
+
+      if (mainContent.length === 0) {
+        mainContent = $('body');
+      }
+
+      // Extract title with multiple fallbacks
+      const title = $('title').text().trim() ||
+                   $('h1').first().text().trim() ||
                    $('meta[property="og:title"]').attr('content') ||
-                   'Untitled';
-      
-      // Extract description
+                   $('meta[name="title"]').attr('content') ||
+                   $('[data-title]').attr('data-title') ||
+                   'Untitled Article';
+
+      // Extract description with multiple fallbacks
       const description = $('meta[name="description"]').attr('content') ||
                          $('meta[property="og:description"]').attr('content') ||
+                         $('meta[name="twitter:description"]').attr('content') ||
                          $('p').first().text().trim() ||
                          '';
-      
+
       // Extract text content
-      const text = mainContent.text().replace(/\s+/g, ' ').trim();
-      
+      let text = mainContent.text().replace(/\s+/g, ' ').trim();
+
+      // If main content is too short, try extracting from all paragraphs
+      if (text.length < 200) {
+        const allParagraphs = $('p').map((i, p) => $(p).text().trim()).get().join(' ');
+        if (allParagraphs.length > text.length) {
+          text = allParagraphs;
+        }
+      }
+
       // Extract meta information
       const meta = {
         description: description,
         keywords: $('meta[name="keywords"]').attr('content') || '',
-        author: $('meta[name="author"]').attr('content') || '',
-        publishedTime: $('meta[property="article:published_time"]').attr('content') || '',
+        author: $('meta[name="author"]').attr('content') ||
+                $('meta[property="article:author"]').attr('content') || '',
+        publishedTime: $('meta[property="article:published_time"]').attr('content') ||
+                      $('time').attr('datetime') ||
+                      $('[itemprop="datePublished"]').attr('content') || '',
         ogTitle: $('meta[property="og:title"]').attr('content') || '',
         ogDescription: $('meta[property="og:description"]').attr('content') || '',
-        ogImage: $('meta[property="og:image"]').attr('content') || ''
+        ogImage: $('meta[property="og:image"]').attr('content') || '',
+        ogUrl: $('meta[property="og:url"]').attr('content') || ''
       };
+
+      // Ensure we have substantial content
+      if (text.length < 50) {
+        throw new Error('Insufficient content extracted');
+      }
 
       return {
         title,
-        url,
-        text: text.substring(0, 10000), // Limit text size
-        html: mainContent.html(),
+        url, // Always provide the source URL
+        text: text.substring(0, 15000), // Increased limit for better content
+        html: mainContent.html() || html,
         meta,
-        scrapedAt: new Date()
+        scrapedAt: new Date(),
+        success: true
       };
     } catch (error) {
-      console.error('Error parsing Scrapy response:', error);
+      console.error(`❌ Error parsing Scrapy response for ${url}:`, error.message);
+
+      // Return minimal but valid response with URL
       return {
-        title: 'Error parsing content',
-        url,
-        text: 'Failed to parse content',
+        title: 'Content extraction failed',
+        url, // Always provide the source URL
+        text: `Failed to extract content: ${error.message}`,
         html: '',
         meta: {},
-        scrapedAt: new Date()
+        scrapedAt: new Date(),
+        success: false,
+        error: error.message
       };
     }
   }

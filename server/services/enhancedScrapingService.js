@@ -82,6 +82,9 @@ class EnhancedScrapingService {
       console.warn('⚠️ Could not ensure tables exist:', tableError.message);
     }
 
+    // Initialize comprehensive search engines
+    const searchEngines = await this.initializeSearchEngines();
+
     // Fetch user's custom columns for extraction
     let customColumns = [];
     try {
@@ -92,12 +95,60 @@ class EnhancedScrapingService {
       // If no columns exist, create default ones
       if (customColumns.length === 0) {
         console.log('📝 No custom columns found, creating default columns...');
+        console.log(`📝 Using userId: ${userId}`);
+
         try {
+          // First, verify the user exists
+          const { User } = require('../models');
+          const user = await User.findByPk(userId);
+          if (!user) {
+            console.error(`❌ User with ID ${userId} not found!`);
+            // Try to find any user as fallback
+            const fallbackUser = await User.findOne();
+            if (fallbackUser) {
+              console.log(`🔄 Using fallback user: ${fallbackUser.email}`);
+              userId = fallbackUser.id;
+            }
+          }
+
           const createdColumns = await Column.createDefaultColumns(userId);
-          console.log(`📝 Created ${createdColumns.length} default columns`);
+          console.log(`📝 Created ${createdColumns.length} default columns for user ${userId}`);
+
+          // Reload columns
           customColumns = await Column.findVisibleByUser(userId);
+          console.log(`📊 Reloaded ${customColumns.length} custom columns`);
+
         } catch (columnError) {
-          console.warn('⚠️ Could not create default columns:', columnError.message);
+          console.error('❌ Could not create default columns:', columnError.message);
+          console.error('Stack:', columnError.stack);
+
+          // Try to create columns with a different approach
+          try {
+            console.log('🔄 Attempting manual column creation...');
+            const defaultColumns = [
+              { name: 'Contact Name', field_key: 'contact_name', description: 'Primary contact person', data_type: 'text', category: 'contact', is_system: true },
+              { name: 'Contact Email', field_key: 'contact_email', description: 'Email address', data_type: 'email', category: 'contact', is_system: true },
+              { name: 'Contact Phone', field_key: 'contact_phone', description: 'Phone number', data_type: 'phone', category: 'contact', is_system: true }
+            ];
+
+            for (const col of defaultColumns) {
+              try {
+                await Column.create({
+                  ...col,
+                  user_id: userId,
+                  display_order: 1,
+                  is_visible: true
+                });
+                console.log(`✅ Created column: ${col.name}`);
+              } catch (createError) {
+                console.log(`⚠️ Column ${col.name} already exists`);
+              }
+            }
+
+            customColumns = await Column.findVisibleByUser(userId);
+          } catch (manualError) {
+            console.error('❌ Manual column creation also failed:', manualError.message);
+          }
         }
       }
     } catch (error) {
@@ -112,51 +163,56 @@ class EnhancedScrapingService {
     this.updateProgress(jobId, 'initializing', 0, sourcesToUse.length, 'Starting enhanced scraping...');
 
     try {
-      // Scrape each source using Scrapy with priority order
-      for (let i = 0; i < sourcesToUse.length; i++) {
-        const source = sourcesToUse[i];
-        try {
-          console.log(`\n📡 Scraping source: ${source}`);
-          
-          // Update progress - scraping source
-          this.updateProgress(jobId, 'scraping', i + 1, sourcesToUse.length, `Scraping ${source}...`);
-          
-          let sourceResults = [];
+      // Use comprehensive multi-engine search
+      console.log('\n🌐 Starting comprehensive web search...');
 
-          switch (source) {
-            case 'google':
-              sourceResults = await this.scrapeGoogleNews(config.keywords, config.max_results_per_run || 20);
-              break;
-            case 'bing':
-              sourceResults = await this.scrapeBingNews(config.keywords, config.max_results_per_run || 20);
-              break;
-            case 'news':
-              sourceResults = await this.scrapeNewsSources(config.keywords, config.max_results_per_run || 20);
-              break;
-            case 'scrapy':
-              sourceResults = await this.scrapeWithScrapy(config.keywords, config.max_results_per_run || 20);
-              break;
-            case 'rss':
-              // Use RSS as fallback only
-              sourceResults = await this.scrapyService.scrapeRSSFeeds(config.keywords, config.max_results_per_run || 20);
-              break;
-            default:
-              console.log(`⚠️ Unknown source: ${source}`);
-              continue;
-          }
+      const maxResultsPerEngine = Math.max(5, Math.floor((config.max_results_per_run || 50) / searchEngines.length));
+      const searchPromises = [];
 
-          console.log(`✅ Source ${source} returned ${sourceResults.length} results`);
-          allResults.push(...sourceResults);
-
-        } catch (error) {
-          console.error(`❌ Error scraping source ${source}:`, error);
-          errors.push({ source, error: error.message });
+      // Search with each engine in parallel
+      for (const engine of searchEngines) {
+        if (engine.enabled) {
+          searchPromises.push(
+            this.searchWithEngine(engine, config.keywords, maxResultsPerEngine)
+          );
         }
       }
 
-      console.log(`\n📊 Total results found: ${allResults.length}`);
+      // Execute all searches in parallel
+      const searchResults = await Promise.allSettled(searchPromises);
 
-      if (allResults.length === 0) {
+      // Collect results from all engines
+      let allResults = [];
+      for (let i = 0; i < searchResults.length; i++) {
+        const result = searchResults[i];
+        const engine = searchEngines[i];
+
+        if (result.status === 'fulfilled') {
+          const engineResults = result.value;
+          console.log(`✅ ${engine.name} returned ${engineResults.length} results`);
+
+          // Add engine results to main collection
+          allResults = allResults.concat(engineResults);
+
+          // Update progress
+          this.updateProgress(jobId, 'scraping', i + 1, searchEngines.length,
+            `Searched ${engine.name} (${engineResults.length} results)...`);
+        } else {
+          console.warn(`❌ ${engine.name} failed:`, result.reason.message);
+        }
+      }
+
+      console.log(`📊 Total results from all engines: ${allResults.length}`);
+
+      // Deduplicate results based on URL
+      const uniqueResults = this.deduplicateResults(allResults);
+      console.log(`🔄 Deduplicated to ${uniqueResults.length} unique results`);
+
+      // Limit results
+      const limitedResults = uniqueResults.slice(0, config.max_results_per_run || 50);
+      console.log(`📋 Limited to ${limitedResults.length} results for processing`);
+
+      if (limitedResults.length === 0) {
         console.log('⚠️ No results found from any source');
         return {
           totalResults: 0,
@@ -168,8 +224,8 @@ class EnhancedScrapingService {
 
       // Enrich results with full content using Scrapy
       console.log('📖 Enriching results with full content...');
-      this.updateProgress(jobId, 'enriching', 0, allResults.length, 'Enriching results with full content...');
-      const enrichedResults = await this.enrichResultsWithContent(allResults);
+      this.updateProgress(jobId, 'enriching', 0, limitedResults.length, 'Enriching results with full content...');
+      const enrichedResults = await this.enrichResultsWithContent(limitedResults);
       console.log(`✅ Enriched ${enrichedResults.length} results with full content`);
 
       // Extract lead data using AI or pattern-based methods
@@ -189,7 +245,7 @@ class EnhancedScrapingService {
       this.updateProgress(jobId, 'completed', savedLeads.length, savedLeads.length, `Successfully saved ${savedLeads.length} leads!`);
 
       return {
-        totalResults: allResults.length,
+        totalResults: limitedResults.length,
         savedLeads: savedLeads.length,
         leads: savedLeads,
         errors,
@@ -925,6 +981,323 @@ class EnhancedScrapingService {
     return industryMap[industryType.toLowerCase()] || null;
   }
 
+  async initializeSearchEngines() {
+    const engines = [];
+
+    // Google News Search
+    engines.push({
+      name: 'Google News',
+      type: 'news',
+      searchUrl: 'https://news.google.com/rss/search?q={keywords}&hl=en-US&gl=US&ceid=US:en',
+      enabled: true,
+      priority: 1
+    });
+
+    // Bing News Search
+    engines.push({
+      name: 'Bing News',
+      type: 'news',
+      searchUrl: 'https://www.bing.com/news/search?q={keywords}&format=rss',
+      enabled: true,
+      priority: 2
+    });
+
+    // RSS Feeds for business news
+    engines.push({
+      name: 'Business RSS Feeds',
+      type: 'rss',
+      feeds: [
+        'https://feeds.npr.org/1006/rss.xml', // Business
+        'https://www.cnbc.com/id/100003114/device/rss/rss.html',
+        'https://feeds.foxbusiness.com/foxbusiness/latest',
+        'https://www.reuters.com/rssFeed/businessNews/',
+        'https://feeds.bloomberg.com/markets/news.rss'
+      ],
+      enabled: true,
+      priority: 3
+    });
+
+    // Industry-specific search engines
+    engines.push({
+      name: 'Construction & Engineering',
+      type: 'industry',
+      searchUrl: 'https://www.enr.com/search?q={keywords}',
+      enabled: true,
+      priority: 4
+    });
+
+    // Real estate and hospitality news
+    engines.push({
+      name: 'Real Estate News',
+      type: 'industry',
+      searchUrl: 'https://www.bizjournals.com/search?q={keywords}',
+      enabled: true,
+      priority: 5
+    });
+
+    // Direct company websites and press releases
+    engines.push({
+      name: 'Company Press Releases',
+      type: 'pr',
+      searchUrl: 'https://www.prnewswire.com/search/news/{keywords}',
+      enabled: true,
+      priority: 6
+    });
+
+    console.log(`🔍 Initialized ${engines.length} search engines`);
+    return engines;
+  }
+
+  async searchWithEngine(engine, keywords, maxResults = 10) {
+    try {
+      const searchTerm = keywords.join(' OR ');
+      const url = engine.searchUrl.replace('{keywords}', encodeURIComponent(searchTerm));
+
+      console.log(`🔍 Searching ${engine.name}: ${url}`);
+
+      const response = await axios.get(url, {
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+          'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+          'Accept-Language': 'en-US,en;q=0.9'
+        },
+        timeout: 15000,
+        responseType: 'text'
+      });
+
+      if (engine.type === 'news' && url.includes('news.google.com')) {
+        return this.parseGoogleNewsRSS(response.data, engine);
+      } else if (engine.type === 'news' && url.includes('bing.com')) {
+        return this.parseBingNewsRSS(response.data, engine);
+      } else {
+        return this.parseGeneralHTML(response.data, url, engine);
+      }
+
+    } catch (error) {
+      console.warn(`⚠️ ${engine.name} search failed:`, error.message);
+      return [];
+    }
+  }
+
+  parseGoogleNewsRSS(xmlData, engine) {
+    try {
+      const results = [];
+      // Simple XML parsing - in production you'd use a proper XML parser
+      const items = xmlData.match(/<item[^>]*>[\s\S]*?<\/item>/g) || [];
+
+      for (const item of items.slice(0, 5)) {
+        const title = item.match(/<title[^>]*>([^<]*)<\/title>/)?.[1] || '';
+        const link = item.match(/<link[^>]*>([^<]*)<\/link>/)?.[1] || '';
+        const description = item.match(/<description[^>]*>([^<]*)<\/description>/)?.[1] || '';
+
+        if (title && link && link.includes('http')) {
+          results.push({
+            title: title.replace(/<!\[CDATA\[|\]\]>/g, ''),
+            url: link,
+            snippet: description.replace(/<!\[CDATA\[|\]\]>/g, ''),
+            source: new URL(link).hostname,
+            publishedDate: new Date(),
+            engine: engine.name
+          });
+        }
+      }
+
+      console.log(`✅ ${engine.name} found ${results.length} results`);
+      return results;
+    } catch (error) {
+      console.warn(`⚠️ Error parsing ${engine.name}:`, error.message);
+      return [];
+    }
+  }
+
+  parseBingNewsRSS(xmlData, engine) {
+    try {
+      const results = [];
+      const items = xmlData.match(/<item[^>]*>[\s\S]*?<\/item>/g) || [];
+
+      for (const item of items.slice(0, 5)) {
+        const title = item.match(/<title[^>]*>([^<]*)<\/title>/)?.[1] || '';
+        const link = item.match(/<link[^>]*>([^<]*)<\/link>/)?.[1] || '';
+        const description = item.match(/<description[^>]*>([^<]*)<\/description>/)?.[1] || '';
+
+        if (title && link && link.includes('http')) {
+          results.push({
+            title: title,
+            url: link,
+            snippet: description,
+            source: new URL(link).hostname,
+            publishedDate: new Date(),
+            engine: engine.name
+          });
+        }
+      }
+
+      console.log(`✅ ${engine.name} found ${results.length} results`);
+      return results;
+    } catch (error) {
+      console.warn(`⚠️ Error parsing ${engine.name}:`, error.message);
+      return [];
+    }
+  }
+
+  parseGeneralHTML(htmlData, url, engine) {
+    try {
+      const $ = require('cheerio').load(htmlData);
+      const results = [];
+
+      // Look for article links with various selectors
+      const selectors = [
+        'a[href*="/news/"]', 'a[href*="/article/"]', 'a[href*="/story/"]',
+        'a[href*="press-release"]', 'a[href*="announcement"]',
+        '.news-item a', '.article-link', '.story-link'
+      ];
+
+      for (const selector of selectors) {
+        $(selector).each((i, elem) => {
+          if (results.length >= 10) return false;
+
+          const $link = $(elem);
+          const href = $link.attr('href');
+          const title = $link.text().trim() || $link.attr('title') || '';
+
+          if (href && title && title.length > 20) {
+            let fullUrl = href;
+            if (!href.startsWith('http')) {
+              fullUrl = url + (href.startsWith('/') ? '' : '/') + href;
+            }
+
+            results.push({
+              title: title,
+              url: fullUrl,
+              snippet: title,
+              source: new URL(fullUrl).hostname,
+              publishedDate: new Date(),
+              engine: engine.name
+            });
+          }
+        });
+      }
+
+      console.log(`✅ ${engine.name} found ${results.length} results`);
+      return results;
+    } catch (error) {
+      console.warn(`⚠️ Error parsing ${engine.name}:`, error.message);
+      return [];
+    }
+  }
+
+  deduplicateResults(results) {
+    const seen = new Set();
+    const unique = [];
+
+    for (const result of results) {
+      // Create a normalized URL for comparison
+      let normalizedUrl = result.url;
+      try {
+        const url = new URL(result.url);
+        // Remove query parameters, fragments, and trailing slashes for better deduplication
+        normalizedUrl = `${url.protocol}//${url.hostname}${url.pathname}`.replace(/\/$/, '');
+      } catch (error) {
+        // If URL parsing fails, use the original URL
+        normalizedUrl = result.url;
+      }
+
+      // Also consider title similarity for better deduplication
+      const normalizedTitle = result.title.toLowerCase().trim();
+
+      // Create a composite key
+      const key = `${normalizedUrl}|${normalizedTitle}`;
+
+      if (!seen.has(key)) {
+        seen.add(key);
+        unique.push(result);
+      }
+    }
+
+    return unique;
+  }
+
+  async checkDuplicateLead(url, title, userId) {
+    try {
+      if (!url || !title || !userId) {
+        return null;
+      }
+
+      // Normalize URL for comparison (remove query params, fragments, etc.)
+      let normalizedUrl = url;
+      try {
+        const urlObj = new URL(url);
+        normalizedUrl = `${urlObj.protocol}//${urlObj.hostname}${urlObj.pathname}`.replace(/\/$/, '');
+      } catch (error) {
+        // If URL parsing fails, use original
+        normalizedUrl = url;
+      }
+
+      // Check for exact URL match first
+      let existingLead = await Lead.findOne({
+        where: {
+          url: normalizedUrl,
+          user_id: userId
+        }
+      });
+
+      if (existingLead) {
+        return existingLead;
+      }
+
+      // Check for very similar titles (using Levenshtein distance approximation)
+      const normalizedTitle = title.toLowerCase().trim();
+      const similarLeads = await Lead.findAll({
+        where: {
+          user_id: userId,
+          title: {
+            [require('sequelize').Op.iLike]: `%${normalizedTitle.substring(0, 20)}%`
+          }
+        },
+        limit: 5
+      });
+
+      // Check similarity with existing leads
+      for (const lead of similarLeads) {
+        const existingTitle = lead.title.toLowerCase().trim();
+        const similarity = this.calculateTitleSimilarity(normalizedTitle, existingTitle);
+
+        if (similarity > 0.8) { // 80% similarity threshold
+          return lead;
+        }
+      }
+
+      // Check for same URL with different parameters
+      const urlPattern = normalizedUrl.replace(/[?&].*$/, '');
+      existingLead = await Lead.findOne({
+        where: {
+          user_id: userId,
+          url: {
+            [require('sequelize').Op.like]: `${urlPattern}%`
+          }
+        }
+      });
+
+      return existingLead;
+    } catch (error) {
+      console.warn(`⚠️ Error checking for duplicate lead: ${error.message}`);
+      return null; // Don't block saving if deduplication check fails
+    }
+  }
+
+  calculateTitleSimilarity(title1, title2) {
+    if (!title1 || !title2) return 0;
+
+    // Simple similarity calculation based on common words
+    const words1 = new Set(title1.split(/\s+/).filter(word => word.length > 2));
+    const words2 = new Set(title2.split(/\s+/).filter(word => word.length > 2));
+
+    const intersection = new Set([...words1].filter(word => words2.has(word)));
+    const union = new Set([...words1, ...words2]);
+
+    return intersection.size / union.size;
+  }
+
   async ensureTablesExist() {
     try {
       const { sequelize } = require('../models');
@@ -1309,6 +1682,14 @@ class EnhancedScrapingService {
           scrapedDate: new Date(),
           extractedData: result.extractedData
         };
+
+        // Check for duplicate leads before saving
+        const existingLead = await this.checkDuplicateLead(leadData.url, leadData.title, userId);
+
+        if (existingLead) {
+          console.log(`⏭️ Skipping duplicate lead: ${leadData.title} (similar to existing lead ${existingLead.id})`);
+          continue; // Skip this lead, move to next one
+        }
 
         console.log('💾 Attempting to save lead with data:', {
           title: leadData.title,
