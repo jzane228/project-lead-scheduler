@@ -188,8 +188,8 @@ const SettingsDashboard = () => {
 // Profile Tab Component
 const ProfileTab = ({ userSettings, updateSettings, isMobile }) => {
   const [formData, setFormData] = useState({
-    firstName: userSettings?.firstName || '',
-    lastName: userSettings?.lastName || '',
+    firstName: userSettings?.first_name || '',
+    lastName: userSettings?.last_name || '',
     email: userSettings?.email || '',
     company: userSettings?.company || '',
     phone: userSettings?.phone || '',

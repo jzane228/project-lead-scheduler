@@ -135,12 +135,12 @@ const Layout = () => {
                 <div>
                   <img
                     className="inline-block h-9 w-9 rounded-full"
-                    src={`https://ui-avatars.com/api/?name=${user?.firstName}+${user?.lastName}&background=3b82f6&color=fff`}
+                    src={`https://ui-avatars.com/api/?name=${user?.first_name}+${user?.last_name}&background=3b82f6&color=fff`}
                     alt=""
                   />
                 </div>
                 <div className="ml-3">
-                  <p className="text-sm font-medium text-gray-700">{user?.getFullName?.() || `${user?.firstName} ${user?.lastName}`}</p>
+                  <p className="text-sm font-medium text-gray-700">{user?.getFullName?.() || `${user?.first_name} ${user?.last_name}`}</p>
                   <p className="text-xs text-gray-500">{user?.email}</p>
                 </div>
               </div>
@@ -199,13 +199,13 @@ const Layout = () => {
                     <span className="sr-only">Open user menu</span>
                     <img
                       className="h-8 w-8 rounded-full"
-                      src={`https://ui-avatars.com/api/?name=${user?.firstName}+${user?.lastName}&background=3b82f6&color=fff`}
+                      src={`https://ui-avatars.com/api/?name=${user?.first_name}+${user?.last_name}&background=3b82f6&color=fff`}
                       alt=""
                     />
                   </button>
                   <div className="hidden md:block">
-                    <div className="text-sm font-medium text-gray-900">{user?.getFullName?.() || `${user?.firstName} ${user?.lastName}`}</div>
-                    <div className="text-sm text-gray-500">{user?.subscriptionTier}</div>
+                    <div className="text-sm font-medium text-gray-900">{user?.getFullName?.() || `${user?.first_name} ${user?.last_name}`}</div>
+                    <div className="text-sm text-gray-500">{user?.subscription_tier}</div>
                   </div>
                 </div>
               </div>

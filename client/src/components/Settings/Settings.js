@@ -40,11 +40,11 @@ const Settings = () => {
   React.useEffect(() => {
     if (userInfo) {
       setFormData({
-        firstName: userInfo.firstName || '',
-        lastName: userInfo.lastName || '',
+        firstName: userInfo.first_name || '',
+        lastName: userInfo.last_name || '',
         company: userInfo.company || '',
         phone: userInfo.phone || '',
-        IndustryId: userInfo.IndustryId || ''
+        IndustryId: userInfo.industry?.id || userInfo.industry_id || ''
       });
     }
   }, [userInfo]);
@@ -76,7 +76,17 @@ const Settings = () => {
 
   const handleSubmit = (e) => {
     e.preventDefault();
-    updateProfileMutation.mutate(formData);
+
+    // Convert form data to match backend expectations
+    const updateData = {
+      first_name: formData.firstName,
+      last_name: formData.lastName,
+      company: formData.company,
+      phone: formData.phone,
+      industry_id: formData.IndustryId || null
+    };
+
+    updateProfileMutation.mutate(updateData);
   };
 
   const tabs = [
