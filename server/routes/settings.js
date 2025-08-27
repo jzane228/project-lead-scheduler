@@ -9,6 +9,66 @@ const SalesforceService = require('../services/salesforceService');
 const hubspotService = new HubSpotService();
 const salesforceService = new SalesforceService();
 
+// @route   GET /api/settings/status
+// @desc    Get system status and API connections
+// @access  Private
+router.get('/status', auth, async (req, res) => {
+  try {
+    const status = {
+      server: {
+        status: 'healthy',
+        environment: process.env.NODE_ENV || 'development',
+        uptime: process.uptime(),
+        timestamp: new Date().toISOString()
+      },
+      apis: {
+        deepseek: {
+          isConnected: !!process.env.DEEPSEEK_API_KEY,
+          status: process.env.DEEPSEEK_API_KEY ? 'connected' : 'disconnected',
+          usage: '0%',
+          limit: 'Unlimited (pay per token)',
+          keyPreview: process.env.DEEPSEEK_API_KEY ? process.env.DEEPSEEK_API_KEY.substring(0, 10) + '...' : null
+        },
+        scrapy: {
+          isConnected: !!process.env.SCRAPY_CLOUD_API_KEY,
+          status: 'connected',
+          usage: '0%',
+          limit: '100 requests/month'
+        },
+        hubspot: {
+          isConnected: !!process.env.HUBSPOT_API_KEY,
+          status: process.env.HUBSPOT_API_KEY ? 'connected' : 'disconnected',
+          lastSync: null,
+          autoSync: false,
+          syncInterval: 'manual'
+        },
+        salesforce: {
+          isConnected: !!process.env.SALESFORCE_CLIENT_ID,
+          status: process.env.SALESFORCE_CLIENT_ID ? 'connected' : 'disconnected',
+          lastSync: null,
+          autoSync: false,
+          syncInterval: 'manual'
+        }
+      },
+      database: {
+        status: 'connected',
+        migrations: 'up to date'
+      },
+      webhooks: {
+        enabled: false,
+        endpoints: [],
+        retryAttempts: 3,
+        timeout: 30000
+      }
+    };
+
+    res.json(status);
+  } catch (error) {
+    console.error('Settings status error:', error);
+    res.status(500).json({ error: 'Failed to get system status' });
+  }
+});
+
 // @route   GET /api/settings/profile
 // @desc    Get user profile settings
 // @access  Private
