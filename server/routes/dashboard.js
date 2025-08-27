@@ -285,8 +285,8 @@ router.get('/alerts', auth, async (req, res) => {
     }
 
     // Check for CRM sync issues
-    const crmStatus = await getCRMStatus(req.user.id);
-    if (crmStatus.hubspot.isConnected && crmStatus.hubspot.lastSync) {
+    const crmStatus = await getCRMStatus(req.user.userId);
+    if (crmStatus && crmStatus.hubspot && crmStatus.hubspot.isConnected && crmStatus.hubspot.lastSync) {
       const lastSync = new Date(crmStatus.hubspot.lastSync);
       if (Date.now() - lastSync.getTime() > 7 * 24 * 60 * 60 * 1000) { // 7 days
         alerts.push({
@@ -301,7 +301,7 @@ router.get('/alerts', auth, async (req, res) => {
     }
 
     // Check for low-quality leads
-    const leadQuality = await analyticsService.getLeadQualityMetrics(req.user.id, 
+    const leadQuality = await analyticsService.getLeadQualityMetrics(req.user.userId, 
       new Date(Date.now() - 30 * 24 * 60 * 60 * 1000), // Last 30 days
       new Date()
     );

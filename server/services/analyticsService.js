@@ -272,9 +272,9 @@ class AnalyticsService {
       type: source.type,
       successRate: source.success_rate || 0,
       totalLeads: source.total_leads || 0,
-      leadsThisPeriod: source.Leads?.length || 0,
-      averageQuality: this.calculateSourceQuality(source.Leads || []),
-      costPerLead: this.calculateCostPerLead(source.type, source.Leads?.length || 0)
+      leadsThisPeriod: source.leads?.length || 0,
+      averageQuality: this.calculateSourceQuality(source.leads || []),
+      costPerLead: this.calculateCostPerLead(source.type, source.leads?.length || 0)
     }));
   }
 
