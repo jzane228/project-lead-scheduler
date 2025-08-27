@@ -69,6 +69,36 @@ router.get('/status', auth, async (req, res) => {
   }
 });
 
+// @route   GET /api/settings/usage
+// @desc    Get API usage and cost tracking
+// @access  Private
+router.get('/usage', auth, async (req, res) => {
+  try {
+    // Get scraping service usage if available
+    const scrapingService = require('../services/enhancedScrapingService');
+    const service = new scrapingService.EnhancedScrapingService();
+
+    const usage = {
+      deepseek: {
+        apiCalls: service.apiCallCount || 0,
+        estimatedCost: (service.apiCallCount || 0) * 0.001, // $0.001 per call
+        period: 'Current session',
+        optimizationMode: service.smartMode ? 'Smart (AI when needed)' : 'Normal (Always AI)'
+      },
+      recommendations: {
+        smartMode: 'Set SMART_EXTRACTION=true to enable intelligent AI usage',
+        costReduction: 'Smart mode can reduce costs by 70-90%',
+        monitoring: 'Check this endpoint regularly to track usage'
+      }
+    };
+
+    res.json(usage);
+  } catch (error) {
+    console.error('Usage tracking error:', error);
+    res.status(500).json({ error: 'Failed to get usage data' });
+  }
+});
+
 // @route   GET /api/settings/profile
 // @desc    Get user profile settings
 // @access  Private

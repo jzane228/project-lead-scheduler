@@ -10,9 +10,17 @@ class EnhancedScrapingService {
     this.deepseekApiKey = process.env.DEEPSEEK_API_KEY;
     this.progressCallbacks = new Map();
 
+    // Cost optimization features
+    this.extractionCache = new Map(); // Cache for similar content
+    this.apiCallCount = 0; // Track usage
+    this.smartMode = process.env.SMART_EXTRACTION === 'true'; // Enable smart mode
+
     // Deepseek only - no OpenAI fallback
     if (this.deepseekApiKey) {
       console.log('✅ Deepseek initialized for enhanced extraction');
+      if (this.smartMode) {
+        console.log('🧠 Smart extraction mode enabled (maximum cost optimization)');
+      }
     } else {
       console.log('⚠️ DEEPSEEK_API_KEY not found - set it in environment variables');
       console.log('   Get your key from: https://platform.deepseek.com/');
@@ -532,6 +540,25 @@ class EnhancedScrapingService {
         return this.dataExtractionService.extractAllData(text);
       }
 
+      // SMART MODE: Try pattern extraction first, only use AI when needed
+      if (this.smartMode) {
+        const patternData = this.dataExtractionService.extractAllData(text);
+        const confidence = this.calculateConfidence(patternData);
+
+        // Only use AI if pattern extraction confidence is low (< 50%)
+        if (confidence < 50) {
+          console.log(`🤖 Using Deepseek AI (pattern confidence: ${confidence}%)`);
+          const aiData = await this.extractWithDeepseek(this.buildAIExtractionPrompt(text, extractionRules));
+
+          // Merge pattern and AI results, preferring AI when available
+          return this.mergeExtractionResults(patternData, aiData);
+        } else {
+          console.log(`📊 Using pattern extraction (confidence: ${confidence}%)`);
+          return patternData;
+        }
+      }
+
+      // NORMAL MODE: Always use AI
       const prompt = this.buildAIExtractionPrompt(text, extractionRules);
       return await this.extractWithDeepseek(prompt);
     } catch (error) {
@@ -541,10 +568,41 @@ class EnhancedScrapingService {
     }
   }
 
+  calculateConfidence(extractedData) {
+    let knownFields = 0;
+    let totalFields = 0;
+
+    Object.entries(extractedData).forEach(([key, value]) => {
+      totalFields++;
+      if (value && value !== 'Unknown' && value !== '') {
+        knownFields++;
+      }
+    });
+
+    return totalFields > 0 ? Math.round((knownFields / totalFields) * 100) : 0;
+  }
+
+  mergeExtractionResults(patternData, aiData) {
+    const merged = { ...patternData };
+
+    // Prefer AI data when available and not "Unknown"
+    Object.entries(aiData).forEach(([key, value]) => {
+      if (value && value !== 'Unknown' && value !== '') {
+        merged[key] = value;
+      }
+    });
+
+    return merged;
+  }
+
 
 
   async extractWithDeepseek(prompt) {
     try {
+      // Track API usage for cost monitoring
+      this.apiCallCount++;
+      const startTime = Date.now();
+
       const response = await axios.post('https://api.deepseek.com/v1/chat/completions', {
         model: "deepseek-chat",
         messages: [
@@ -558,16 +616,20 @@ class EnhancedScrapingService {
           }
         ],
         temperature: 0.1,
-        max_tokens: 500
+        max_tokens: 200 // Reduced from 500 for cost optimization
       }, {
         headers: {
           'Authorization': `Bearer ${this.deepseekApiKey}`,
           'Content-Type': 'application/json'
         },
-        timeout: 30000
+        timeout: 15000 // Reduced timeout
       });
 
+      const processingTime = Date.now() - startTime;
       const content = response.data.choices[0].message.content;
+
+      // Log usage for cost tracking
+      console.log(`💰 Deepseek API Call #${this.apiCallCount}: ${processingTime}ms`);
 
       try {
         return JSON.parse(content);
@@ -581,22 +643,73 @@ class EnhancedScrapingService {
     }
   }
 
+  // Batch processing for multiple leads (further cost optimization)
+  async extractMultipleWithAI(contentList, extractionRules) {
+    if (!this.smartMode) {
+      // Normal mode: process individually
+      return Promise.all(contentList.map(content => this.extractWithAI(content, extractionRules)));
+    }
+
+    // Smart mode: filter out low-confidence items first
+    const results = [];
+    for (const content of contentList) {
+      const patternData = this.dataExtractionService.extractAllData(content);
+      const confidence = this.calculateConfidence(patternData);
+
+      if (confidence >= 50) {
+        // High confidence, use pattern extraction
+        console.log(`📊 Batch: Pattern extraction (${confidence}%)`);
+        results.push(patternData);
+      } else {
+        // Low confidence, use AI extraction
+        console.log(`🤖 Batch: AI extraction (${confidence}%)`);
+        try {
+          const aiData = await this.extractWithAI(content, extractionRules);
+          results.push(aiData);
+        } catch (error) {
+          console.error('Batch AI extraction failed:', error);
+          results.push(patternData); // Fallback to pattern
+        }
+      }
+    }
+
+    return results;
+  }
+
   buildAIExtractionPrompt(text, extractionRules) {
-    let prompt = `Extract the following information from this web content and return it as valid JSON:\n\n`;
-    
-    const fields = [
-      'company', 'location', 'projectType', 'budget', 'timeline', 
-      'roomCount', 'squareFootage', 'employees', 'status', 'priority', 'industryType'
-    ];
-    
-    fields.forEach(field => {
+    // Preprocess text to reduce token usage
+    const processedText = this.preprocessText(text);
+
+    // Use only essential fields for cost optimization
+    const essentialFields = ['company', 'location', 'projectType', 'budget'];
+
+    let prompt = `Extract key business information from this content. Return JSON only:\n\n`;
+
+    essentialFields.forEach(field => {
       prompt += `- ${field}: ${this.getFieldDescription(field)}\n`;
     });
-    
-    prompt += `\nContent to analyze:\n${text.substring(0, 3000)}...\n\n`;
-    prompt += `Return only valid JSON with the extracted information. Use "Unknown" for missing values.`;
-    
+
+    // Limit content to 1500 characters (50% reduction)
+    prompt += `\nContent:\n${processedText.substring(0, 1500)}\n\n`;
+    prompt += `Return JSON: {"company":"...", "location":"...", "projectType":"...", "budget":"..."}`;
+
     return prompt;
+  }
+
+  preprocessText(text) {
+    // Remove irrelevant content to reduce token usage
+    return text
+      // Remove HTML tags
+      .replace(/<[^>]*>/g, '')
+      // Remove excessive whitespace
+      .replace(/\s+/g, ' ')
+      // Remove common boilerplate
+      .replace(/cookie policy|privacy policy|terms of service|advertisement|newsletter|subscribe/gi, '')
+      // Remove navigation elements
+      .replace(/home|about|contact|menu|navigation/gi, '')
+      // Keep only first 1500 chars of meaningful content
+      .substring(0, 2000)
+      .trim();
   }
 
   getFieldDescription(field) {
