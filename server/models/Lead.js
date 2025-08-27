@@ -36,8 +36,9 @@ module.exports = (sequelize) => {
       allowNull: true
     },
     contact_info: {
-      type: DataTypes.TEXT,
-      allowNull: true
+      type: DataTypes.JSONB,
+      allowNull: true,
+      comment: 'Contact information stored as JSON object'
     },
     industry_type: {
       type: DataTypes.STRING,
@@ -128,9 +129,9 @@ module.exports = (sequelize) => {
       allowNull: true,
       validate: {
         min: 0,
-        max: 1
+        max: 100
       },
-      comment: 'AI confidence score for extracted data'
+      comment: 'AI confidence score for extracted data (0-100%)'
     },
     extraction_method: {
       type: DataTypes.ENUM('ai', 'manual', 'template'),
@@ -186,6 +187,20 @@ module.exports = (sequelize) => {
       foreignKey: 'lead_id',
       otherKey: 'tag_id',
       as: 'tags'
+    });
+
+    // Many-to-many relationship with columns (for tracking which columns are used)
+    Lead.belongsToMany(models.Column, {
+      through: 'LeadColumns',
+      foreignKey: 'lead_id',
+      otherKey: 'column_id',
+      as: 'columns'
+    });
+
+    // One-to-many relationship with contacts
+    Lead.hasMany(models.Contact, {
+      foreignKey: 'lead_id',
+      as: 'contacts'
     });
   };
 

@@ -1139,6 +1139,13 @@ class EnhancedScrapingService {
         if (result.extractedData.contactInfo?.phone) contactInfo.phone = result.extractedData.contactInfo.phone;
         if (result.extractedData.contactInfo?.company) contactInfo.company = result.extractedData.contactInfo.company;
 
+        // Ensure contact_info is valid JSONB
+        let finalContactInfo = null;
+        if (Object.keys(contactInfo).length > 0) {
+          finalContactInfo = contactInfo;
+          console.log(`📞 Contact info to save:`, finalContactInfo);
+        }
+
         // Build keywords array combining scraping keywords and extracted keywords
         const keywords = [
           ...(config.keywords || []),
@@ -1151,7 +1158,7 @@ class EnhancedScrapingService {
                           (result.extractedData.aiUsed ? 0.8 : 0.6);
 
         // Create lead with comprehensive extracted data
-        const lead = await Lead.create({
+        const leadData = {
           // Basic Information
           title: result.title,
           description: result.extractedData.description || result.articleText || result.snippet || result.title,
@@ -1164,7 +1171,7 @@ class EnhancedScrapingService {
 
           // Company & Contact Information
           company: result.extractedData.company || 'Unknown',
-          contact_info: Object.keys(contactInfo).length > 0 ? contactInfo : null,
+          contact_info: finalContactInfo,
 
           // Industry & Keywords
           industry_type: result.extractedData.industryType || null,
@@ -1204,7 +1211,19 @@ class EnhancedScrapingService {
           publishedDate: result.publishedDate,
           scrapedDate: new Date(),
           extractedData: result.extractedData
+        };
+
+        console.log('💾 Attempting to save lead with data:', {
+          title: leadData.title,
+          confidence: leadData.confidence,
+          contact_info: leadData.contact_info,
+          custom_fields: leadData.custom_fields
         });
+
+        // Create lead with error handling
+        const lead = await Lead.create(leadData);
+
+        console.log(`✅ Successfully saved lead: ${lead.id}`);
 
         // Add tags based on keywords and extracted data
         if (keywords.length > 0) {
