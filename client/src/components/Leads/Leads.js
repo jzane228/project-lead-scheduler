@@ -51,7 +51,7 @@ const Leads = () => {
       });
 
       console.log('Fetching leads with params:', params.toString());
-      const response = await axios.get(`/api/leads-auth?${params}`);
+      const response = await axios.get(`/api/leads/auth?${params}`);
       console.log('Leads API response:', response.data);
       return response.data;
     },

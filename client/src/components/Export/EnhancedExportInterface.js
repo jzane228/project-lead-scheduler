@@ -52,7 +52,7 @@ const EnhancedExportInterface = () => {
   const { data: leads } = useQuery(
     'leads',
     async () => {
-      const response = await axios.get('/api/leads-auth');
+      const response = await axios.get('/api/leads/auth');
       return response.data;
     }
   );

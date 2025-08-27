@@ -65,7 +65,7 @@ const LeadsEnhanced = () => {
         ...filters
       });
       
-      const response = await axios.get(`/api/leads-auth?${params}`);
+      const response = await axios.get(`/api/leads/auth?${params}`);
       return response.data;
     },
     {
