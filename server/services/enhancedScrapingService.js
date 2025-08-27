@@ -1,6 +1,7 @@
 const ScrapyService = require('./scrapyService');
 const DataExtractionService = require('./dataExtractionService');
 const OpenAI = require('openai');
+const axios = require('axios');
 const { Lead, LeadSource } = require('../models');
 
 class EnhancedScrapingService {
@@ -8,10 +9,14 @@ class EnhancedScrapingService {
     this.scrapyService = new ScrapyService();
     this.dataExtractionService = new DataExtractionService();
     this.openai = null;
+    this.deepseekApiKey = process.env.DEEPSEEK_API_KEY;
+    this.useDeepseek = process.env.USE_DEEPSEEK === 'true' || !process.env.OPENAI_API_KEY;
     this.progressCallbacks = new Map();
-    
-    // Initialize OpenAI if available
-    if (process.env.OPENAI_API_KEY) {
+
+    // Initialize AI service (OpenAI or Deepseek)
+    if (this.useDeepseek && this.deepseekApiKey) {
+      console.log('✅ Using Deepseek for enhanced extraction (cheaper option)');
+    } else if (process.env.OPENAI_API_KEY) {
       try {
         this.openai = new OpenAI({
           apiKey: process.env.OPENAI_API_KEY
@@ -21,7 +26,7 @@ class EnhancedScrapingService {
         console.warn('⚠️ OpenAI initialization failed:', error.message);
       }
     } else {
-      console.log('⚠️ OpenAI API key not found, using pattern-based extraction');
+      console.log('⚠️ No AI API key found, using pattern-based extraction only');
     }
   }
 
@@ -534,9 +539,52 @@ class EnhancedScrapingService {
   async extractWithAI(text, extractionRules) {
     try {
       const prompt = this.buildAIExtractionPrompt(text, extractionRules);
-      
-      const completion = await this.openai.chat.completions.create({
-        model: "gpt-4",
+
+      if (this.useDeepseek && this.deepseekApiKey) {
+        return await this.extractWithDeepseek(prompt);
+      } else if (this.openai) {
+        return await this.extractWithOpenAI(prompt);
+      } else {
+        throw new Error('No AI service available');
+      }
+    } catch (error) {
+      console.error('AI extraction failed:', error);
+      // Fallback to pattern extraction
+      return this.dataExtractionService.extractAllData(text);
+    }
+  }
+
+  async extractWithOpenAI(prompt) {
+    const completion = await this.openai.chat.completions.create({
+      model: "gpt-3.5-turbo", // Cost-effective model
+      messages: [
+        {
+          role: "system",
+          content: "You are an expert at extracting business lead information from web content. Extract only the requested information and return it in valid JSON format."
+        },
+        {
+          role: "user",
+          content: prompt
+        }
+      ],
+      temperature: 0.1,
+      max_tokens: 500 // Reduced for cost savings
+    });
+
+    const response = completion.choices[0].message.content;
+
+    try {
+      return JSON.parse(response);
+    } catch (parseError) {
+      console.error('Failed to parse OpenAI response:', parseError);
+      throw parseError;
+    }
+  }
+
+  async extractWithDeepseek(prompt) {
+    try {
+      const response = await axios.post('https://api.deepseek.com/v1/chat/completions', {
+        model: "deepseek-chat",
         messages: [
           {
             role: "system",
@@ -548,22 +596,26 @@ class EnhancedScrapingService {
           }
         ],
         temperature: 0.1,
-        max_tokens: 1000
+        max_tokens: 500
+      }, {
+        headers: {
+          'Authorization': `Bearer ${this.deepseekApiKey}`,
+          'Content-Type': 'application/json'
+        },
+        timeout: 30000
       });
 
-      const response = completion.choices[0].message.content;
-      
+      const content = response.data.choices[0].message.content;
+
       try {
-        return JSON.parse(response);
+        return JSON.parse(content);
       } catch (parseError) {
-        console.error('Failed to parse AI response:', parseError);
-        // Fallback to pattern extraction
-        return this.dataExtractionService.extractAllData(text);
+        console.error('Failed to parse Deepseek response:', parseError);
+        throw parseError;
       }
     } catch (error) {
-      console.error('AI extraction failed:', error);
-      // Fallback to pattern extraction
-      return this.dataExtractionService.extractAllData(text);
+      console.error('Deepseek API error:', error.response?.data || error.message);
+      throw error;
     }
   }
 
