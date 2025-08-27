@@ -328,7 +328,7 @@ module.exports = (sequelize) => {
       }
     }
 
-    return createdColumns; // Only return newly created columns
+    return [...createdColumns, ...existingColumns]; // Return all columns (created + existing)
   };
 
   return Column;
