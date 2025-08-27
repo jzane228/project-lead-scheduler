@@ -1,6 +1,5 @@
 import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { useAuth } from '../../contexts/AuthContext';
 import { EyeIcon, EyeSlashIcon } from '@heroicons/react/24/outline';
 
 const Register = () => {
@@ -78,19 +77,33 @@ const Register = () => {
 
     try {
       const { firstName, lastName, email, password, company } = formData;
-      const result = await register({
-        firstName,
-        lastName,
-        email,
-        password,
-        company
+
+      // Try direct fetch instead of axios to bypass any proxy issues
+      const response = await fetch('https://project-lead-scheduler.onrender.com/api/auth/register', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          first_name: firstName,
+          last_name: lastName,
+          email,
+          password,
+          company
+        })
       });
 
-      if (result.success) {
+      const data = await response.json();
+
+      if (response.ok) {
+        localStorage.setItem('token', data.token);
         navigate('/dashboard');
+      } else {
+        setError(data.error || data.message || 'Registration failed');
       }
     } catch (err) {
-      setError(err.message || 'Registration failed. Please try again.');
+      console.error('Registration error:', err);
+      setError('Network error. Please try again.');
     } finally {
       setIsLoading(false);
     }

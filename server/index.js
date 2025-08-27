@@ -117,6 +117,45 @@ app.use('*', (req, res) => {
 // Initialize scheduler service
 const schedulerService = new SchedulerService();
 
+// Seed industries data
+const seedIndustries = async () => {
+  const { Industry } = require('./models');
+  const industries = [
+    'Technology',
+    'Healthcare',
+    'Finance',
+    'Education',
+    'Real Estate',
+    'Manufacturing',
+    'Retail',
+    'Construction',
+    'Transportation',
+    'Food & Beverage',
+    'Entertainment',
+    'Energy',
+    'Agriculture',
+    'Consulting',
+    'Legal Services',
+    'Marketing',
+    'Human Resources',
+    'Research & Development',
+    'Government',
+    'Non-profit'
+  ];
+
+  for (const industryName of industries) {
+    try {
+      await Industry.findOrCreate({
+        where: { name: industryName },
+        defaults: { name: industryName }
+      });
+    } catch (error) {
+      console.log(`Industry ${industryName} already exists or error:`, error.message);
+    }
+  }
+  console.log('Industries seeded successfully');
+};
+
 // Start server
 const startServer = async () => {
   try {
@@ -138,6 +177,10 @@ const startServer = async () => {
     } else {
       console.log('Production environment: skipping database sync');
     }
+
+    // Seed industries data
+    console.log('Seeding industries data...');
+    await seedIndustries();
 
     // Initialize scheduler (with error handling)
     console.log('Initializing scheduler...');

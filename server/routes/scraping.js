@@ -8,23 +8,26 @@ const SchedulerService = require('../services/schedulerService');
 const schedulerService = new SchedulerService();
 
 // @route   GET /api/scraping/configs
-// @desc    Get basic scraping info (no auth required for testing)
-// @access  Public (for testing)
-router.get('/configs', async (req, res) => {
+// @desc    Get all scraping configurations for user
+// @access  Private
+router.get('/configs', auth, async (req, res) => {
   try {
-    res.json({
-      message: 'Scraping configs endpoint working!',
-      note: 'This endpoint requires authentication for full data',
-      availableEndpoints: [
-        '/api/scraping/configs (requires auth)',
-        '/api/scraping/configs/:id (requires auth)',
-        '/api/scraping/stats (requires auth)'
+    const configs = await ScrapingConfig.findAll({
+      where: { user_id: req.user.userId },
+      include: [
+        {
+          model: User,
+          as: 'user',
+          attributes: ['id', 'email', 'subscription_tier', 'max_scraping_configs']
+        }
       ],
-      timestamp: new Date().toISOString()
+      order: [['createdAt', 'DESC']]
     });
+
+    res.json({ configs });
   } catch (error) {
-    console.error('Scraping configs error:', error);
-    res.status(500).json({ error: 'Server error' });
+    console.error('Error fetching scraping configs:', error);
+    res.status(500).json({ error: 'Failed to fetch scraping configurations' });
   }
 });
 

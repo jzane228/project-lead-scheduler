@@ -2,8 +2,11 @@ import React, { createContext, useContext, useState, useEffect, useCallback } fr
 import axios from 'axios';
 import toast from 'react-hot-toast';
 
-// Configure axios base URL - use environment variable or default to production
-axios.defaults.baseURL = process.env.REACT_APP_API_URL || 'https://project-lead-scheduler.onrender.com';
+// Configure axios base URL - always use production URL
+axios.defaults.baseURL = 'https://project-lead-scheduler.onrender.com';
+
+// Ensure axios doesn't use any proxy settings
+axios.defaults.proxy = false;
 
 const AuthContext = createContext();
 

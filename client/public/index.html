@@ -10,10 +10,42 @@
       content="AI-Powered Lead Generation Platform"
     />
     <title>Lead Generator - AI-Powered Prospecting</title>
+    <script>
+      // Add a global function to test API connectivity
+      window.testRegistration = async function() {
+        try {
+          const response = await fetch('https://project-lead-scheduler.onrender.com/api/auth/register', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              first_name: 'Test',
+              last_name: 'User',
+              email: 'test@example.com',
+              password: 'password123',
+              company: 'Test Company'
+            })
+          });
+          const data = await response.json();
+          console.log('Registration test result:', data);
+          alert('Registration test result: ' + JSON.stringify(data, null, 2));
+          return data;
+        } catch (error) {
+          console.error('Registration test error:', error);
+          alert('Registration test error: ' + error.message);
+          return null;
+        }
+      };
+    </script>
   </head>
   <body>
     <noscript>You need to enable JavaScript to run this app.</noscript>
     <div id="root"></div>
+    <!-- Test button for API connectivity -->
+    <button onclick="testRegistration()" style="position: fixed; top: 10px; right: 10px; z-index: 9999; background: red; color: white; padding: 10px; border: none; border-radius: 5px;">
+      Test API
+    </button>
   </body>
 </html>
 
