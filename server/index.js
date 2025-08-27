@@ -177,7 +177,15 @@ const startServer = async () => {
 
     // Initialize database tables and default data
     console.log('Initializing database tables and default data...');
-    await initializeDatabase();
+    try {
+      await initializeDatabase();
+      console.log('✅ Database initialization completed successfully');
+    } catch (dbError) {
+      console.error('❌ Database initialization failed:', dbError.message);
+      console.log('🔄 Attempting to continue without full database initialization...');
+      // Don't fail server startup due to database issues
+      // The system will work with existing tables and create missing ones as needed
+    }
 
     // Seed industries data
     console.log('Seeding industries data...');

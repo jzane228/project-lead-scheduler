@@ -426,6 +426,87 @@ function calculateNextRun(frequency) {
   return next_run;
 }
 
+// @route   POST /api/scraping/ensure-tables
+// @desc    Ensure all required database tables exist
+// @access  Private
+router.post('/ensure-tables', auth, async (req, res) => {
+  try {
+    console.log('🔧 Ensuring database tables exist...');
+
+    const initializeDatabase = require('../databaseInit');
+    await initializeDatabase();
+
+    res.json({
+      success: true,
+      message: 'Database tables verified and created successfully'
+    });
+  } catch (error) {
+    console.error('❌ Error ensuring tables:', error);
+    res.status(500).json({
+      error: 'Failed to ensure database tables',
+      details: error.message
+    });
+  }
+});
+
+// @route   GET /api/scraping/diagnostics
+// @desc    Get database and system diagnostics
+// @access  Private
+router.get('/diagnostics', auth, async (req, res) => {
+  try {
+    const { sequelize, User, Column, Contact, Lead } = require('../models');
+
+    const diagnostics = {
+      database: {
+        connected: false,
+        tables: {}
+      },
+      counts: {}
+    };
+
+    // Check database connection
+    try {
+      await sequelize.authenticate();
+      diagnostics.database.connected = true;
+    } catch (error) {
+      diagnostics.database.error = error.message;
+    }
+
+    // Check table existence
+    const tables = ['Users', 'Leads', 'Columns', 'Contacts', 'LeadColumns'];
+    for (const table of tables) {
+      try {
+        await sequelize.query(`SELECT 1 FROM "${table}" LIMIT 1`);
+        diagnostics.database.tables[table] = 'exists';
+      } catch (error) {
+        diagnostics.database.tables[table] = 'missing';
+      }
+    }
+
+    // Get record counts
+    try {
+      diagnostics.counts.users = await User.count();
+      diagnostics.counts.leads = await Lead.count();
+      diagnostics.counts.columns = await Column.count();
+      diagnostics.counts.contacts = await Contact.count();
+    } catch (error) {
+      diagnostics.counts.error = error.message;
+    }
+
+    res.json({
+      success: true,
+      diagnostics,
+      timestamp: new Date().toISOString()
+    });
+  } catch (error) {
+    console.error('❌ Diagnostics error:', error);
+    res.status(500).json({
+      error: 'Failed to get diagnostics',
+      details: error.message
+    });
+  }
+});
+
 // @route   POST /api/scraping/test-custom-columns
 // @desc    Test custom columns integration
 // @access  Private

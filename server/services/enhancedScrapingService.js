@@ -75,12 +75,31 @@ class EnhancedScrapingService {
 
     console.log(`📰 Sources to use: ${sourcesToUse.join(', ')}`);
 
+    // Ensure database tables exist before proceeding
+    try {
+      await this.ensureTablesExist();
+    } catch (tableError) {
+      console.warn('⚠️ Could not ensure tables exist:', tableError.message);
+    }
+
     // Fetch user's custom columns for extraction
     let customColumns = [];
     try {
       const { Column } = require('../models');
       customColumns = await Column.findVisibleByUser(userId);
       console.log(`📊 Loaded ${customColumns.length} custom columns for extraction`);
+
+      // If no columns exist, create default ones
+      if (customColumns.length === 0) {
+        console.log('📝 No custom columns found, creating default columns...');
+        try {
+          const createdColumns = await Column.createDefaultColumns(userId);
+          console.log(`📝 Created ${createdColumns.length} default columns`);
+          customColumns = await Column.findVisibleByUser(userId);
+        } catch (columnError) {
+          console.warn('⚠️ Could not create default columns:', columnError.message);
+        }
+      }
     } catch (error) {
       console.warn('⚠️ Could not load custom columns, proceeding without them:', error.message);
     }
@@ -904,6 +923,48 @@ class EnhancedScrapingService {
     };
     
     return industryMap[industryType.toLowerCase()] || null;
+  }
+
+  async ensureTablesExist() {
+    try {
+      const { sequelize } = require('../models');
+
+      // Check and create Columns table
+      try {
+        await sequelize.query('SELECT 1 FROM "Columns" LIMIT 1');
+      } catch (error) {
+        console.log('📊 Creating Columns table...');
+        const Column = require('../models/Column')(sequelize);
+        await Column.sync({ force: true });
+        console.log('✅ Columns table created');
+      }
+
+      // Check and create Contacts table
+      try {
+        await sequelize.query('SELECT 1 FROM "Contacts" LIMIT 1');
+      } catch (error) {
+        console.log('👥 Creating Contacts table...');
+        const Contact = require('../models/Contact')(sequelize);
+        await Contact.sync({ force: true });
+        console.log('✅ Contacts table created');
+      }
+
+      // Create junction tables
+      await sequelize.query(`
+        CREATE TABLE IF NOT EXISTS "LeadColumns" (
+          "lead_id" UUID REFERENCES "Leads"("id") ON DELETE CASCADE,
+          "column_id" UUID REFERENCES "Columns"("id") ON DELETE CASCADE,
+          "created_at" TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+          "updated_at" TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+          PRIMARY KEY ("lead_id", "column_id")
+        );
+      `);
+
+      console.log('✅ All required tables verified/created');
+    } catch (error) {
+      console.error('❌ Error ensuring tables exist:', error.message);
+      // Don't throw error, allow scraping to continue
+    }
   }
 
   isMostlyUnknown(extractedData) {

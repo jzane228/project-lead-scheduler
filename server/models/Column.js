@@ -272,7 +272,7 @@ module.exports = (sequelize) => {
       {
         name: 'Job Count',
         field_key: 'job_count',
-        description: 'Number of jobs or positions created',
+        description: 'Number of jobs or positions that will be created',
         data_type: 'number',
         category: 'project',
         is_system: true,
@@ -281,19 +281,54 @@ module.exports = (sequelize) => {
     ];
 
     const createdColumns = [];
+    const existingColumns = [];
+
     for (const columnData of defaultColumns) {
       try {
+        // Check if column already exists
+        const existingColumn = await this.findOne({
+          where: {
+            field_key: columnData.field_key,
+            user_id: userId
+          }
+        });
+
+        if (existingColumn) {
+          existingColumns.push(existingColumn);
+          continue; // Skip creation, column already exists
+        }
+
+        // Create new column
         const column = await this.create({
           ...columnData,
           user_id: userId
         });
         createdColumns.push(column);
       } catch (error) {
-        console.log(`Column ${columnData.name} already exists or error:`, error.message);
+        // Handle unique constraint errors silently
+        if (error.name === 'SequelizeUniqueConstraintError') {
+          // Column already exists, find it and add to existing
+          try {
+            const existingColumn = await this.findOne({
+              where: {
+                field_key: columnData.field_key,
+                user_id: userId
+              }
+            });
+            if (existingColumn) {
+              existingColumns.push(existingColumn);
+            }
+          } catch (findError) {
+            // Silently ignore find errors for existing columns
+          }
+        } else {
+          // Log other errors but don't fail the process
+          console.log(`⚠️ Error creating column ${columnData.name}:`, error.message);
+        }
       }
     }
 
-    return createdColumns;
+    return createdColumns; // Only return newly created columns
   };
 
   return Column;

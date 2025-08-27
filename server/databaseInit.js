@@ -1,4 +1,13 @@
-const { sequelize, User, Column, Contact, Lead, LeadSource, Tag } = require('./models');
+const { sequelize, User, Column, Lead, LeadSource, Tag } = require('./models');
+
+// Import Contact model separately to avoid issues
+let Contact;
+try {
+  const ContactFactory = require('./models/Contact');
+  Contact = ContactFactory(sequelize);
+} catch (error) {
+  console.log('⚠️ Contact model not available:', error.message);
+}
 
 async function initializeDatabase() {
   console.log('🚀 Initializing database tables and default data...');
@@ -37,8 +46,12 @@ async function initializeDatabase() {
       const users = await User.findAll();
       for (const user of users) {
         try {
-          await Column.createDefaultColumns(user.id);
-          console.log(`📝 Created default columns for user: ${user.email}`);
+          const createdColumns = await Column.createDefaultColumns(user.id);
+          if (createdColumns && createdColumns.length > 0) {
+            console.log(`📝 Created ${createdColumns.length} default columns for user: ${user.email}`);
+          } else {
+            console.log(`⏭️ Default columns already exist for user: ${user.email}`);
+          }
         } catch (error) {
           console.log(`⚠️ Could not create default columns for user ${user.email}: ${error.message}`);
         }
@@ -46,13 +59,21 @@ async function initializeDatabase() {
     }
 
     // Create Contact table if it doesn't exist
-    try {
-      await sequelize.query('SELECT 1 FROM "Contacts" LIMIT 1');
-      console.log('✅ Contacts table already exists');
-    } catch (error) {
-      console.log('👥 Creating Contacts table...');
-      await Contact.sync({ force: true });
-      console.log('✅ Contacts table created');
+    if (Contact) {
+      try {
+        await sequelize.query('SELECT 1 FROM "Contacts" LIMIT 1');
+        console.log('✅ Contacts table already exists');
+      } catch (error) {
+        console.log('👥 Creating Contacts table...');
+        try {
+          await Contact.sync({ force: true });
+          console.log('✅ Contacts table created');
+        } catch (syncError) {
+          console.log('⚠️ Could not create Contacts table:', syncError.message);
+        }
+      }
+    } else {
+      console.log('⚠️ Contact model not available, skipping Contacts table creation');
     }
 
     // Create junction tables
