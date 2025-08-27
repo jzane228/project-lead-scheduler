@@ -1,5 +1,10 @@
 class DataExtractionService {
   constructor() {
+    this.deepseekApiKey = process.env.DEEPSEEK_API_KEY;
+    this.apiCallCount = 0;
+    this.maxTokensPerRequest = 4000; // Conservative limit for cost control
+    this.extractionCache = new Map(); // Cache for similar content
+
     // Common patterns for different types of data
     this.patterns = {
       company: [
@@ -916,6 +921,245 @@ class DataExtractionService {
     }
     
     return data;
+  }
+
+  // Enhanced AI-powered extraction methods
+  async extractWithCustomColumns(content, customColumns = []) {
+    if (!this.deepseekApiKey || !content || customColumns.length === 0) {
+      return {};
+    }
+
+    try {
+      console.log(`🤖 Extracting ${customColumns.length} custom fields with AI...`);
+
+      // Create context-aware prompts for each custom column
+      const extractions = {};
+
+      for (const column of customColumns) {
+        if (column.is_visible) {
+          const prompt = this.buildCustomColumnPrompt(column, content);
+          const extractedValue = await this.callDeepseekAPI(prompt);
+
+          if (extractedValue && extractedValue !== 'Unknown' && extractedValue !== 'N/A') {
+            extractions[column.field_key] = this.formatExtractedValue(extractedValue, column.data_type);
+            console.log(`📝 Extracted ${column.name}: ${extractions[column.field_key]}`);
+          }
+        }
+      }
+
+      return extractions;
+    } catch (error) {
+      console.warn(`⚠️ AI extraction failed: ${error.message}`);
+      return {};
+    }
+  }
+
+  buildCustomColumnPrompt(column, content) {
+    const contextPrompts = {
+      contact: `Extract contact information from the following article. Look for: names, titles, companies, email addresses, phone numbers, or any contact details.`,
+      project: `Extract project-related information from the article including: size, capacity, features, specifications, or project details.`,
+      company: `Extract company/organization information from the article including: company names, ownership, partnerships, or corporate details.`,
+      location: `Extract location information from the article including: addresses, cities, regions, landmarks, or geographic details.`,
+      financial: `Extract financial information from the article including: costs, budgets, investments, funding, pricing, or monetary figures.`,
+      timeline: `Extract time-related information from the article including: dates, deadlines, schedules, timelines, or temporal information.`
+    };
+
+    const basePrompt = contextPrompts[column.category] || `Extract information from the article.`;
+    const specificPrompt = `Based on this description: "${column.description}", extract the most relevant ${column.data_type} value.`;
+
+    return `${basePrompt} ${specificPrompt}
+
+Article content:
+${content.substring(0, 2000)}
+
+Return only the extracted value, or "Unknown" if not found. Be precise and return only the actual value without additional text.`;
+  }
+
+  async callDeepseekAPI(prompt) {
+    if (!this.deepseekApiKey) {
+      throw new Error('Deepseek API key not configured');
+    }
+
+    // Check cache first
+    const cacheKey = this.generateCacheKey(prompt);
+    if (this.extractionCache.has(cacheKey)) {
+      return this.extractionCache.get(cacheKey);
+    }
+
+    try {
+      this.apiCallCount++;
+
+      const response = await require('axios').post('https://api.deepseek.com/v1/chat/completions', {
+        model: 'deepseek-chat',
+        messages: [
+          {
+            role: 'system',
+            content: 'You are a precise data extraction assistant. Return only the extracted value without any additional text or explanation.'
+          },
+          {
+            role: 'user',
+            content: prompt
+          }
+        ],
+        max_tokens: 100,
+        temperature: 0.1 // Low temperature for consistent extraction
+      }, {
+        headers: {
+          'Authorization': `Bearer ${this.deepseekApiKey}`,
+          'Content-Type': 'application/json'
+        },
+        timeout: 10000
+      });
+
+      const extractedValue = response.data.choices?.[0]?.message?.content?.trim();
+
+      // Cache the result
+      if (extractedValue) {
+        this.extractionCache.set(cacheKey, extractedValue);
+      }
+
+      return extractedValue || 'Unknown';
+    } catch (error) {
+      console.error(`❌ Deepseek API error:`, error.message);
+      throw error;
+    }
+  }
+
+  generateCacheKey(prompt) {
+    // Create a hash of the prompt for caching
+    let hash = 0;
+    for (let i = 0; i < prompt.length; i++) {
+      const char = prompt.charCodeAt(i);
+      hash = ((hash << 5) - hash) + char;
+      hash = hash & hash; // Convert to 32bit integer
+    }
+    return hash.toString();
+  }
+
+  formatExtractedValue(value, dataType) {
+    if (!value || value === 'Unknown' || value === 'N/A') {
+      return null;
+    }
+
+    switch (dataType) {
+      case 'currency':
+        // Extract numeric value and format as currency
+        const currencyMatch = value.match(/[\$]?(\d+(?:,\d{3})*(?:\.\d{2})?)/);
+        return currencyMatch ? parseFloat(currencyMatch[1].replace(/,/g, '')) : null;
+
+      case 'number':
+        const numberMatch = value.match(/(\d+(?:,\d{3})*(?:\.\d+)?)/);
+        return numberMatch ? parseFloat(numberMatch[1].replace(/,/g, '')) : null;
+
+      case 'date':
+        // Try to parse various date formats
+        const dateMatch = value.match(/(\d{1,2}[-\/]\d{1,2}[-\/]\d{2,4}|\d{4}[-\/]\d{1,2}[-\/]\d{1,2})/);
+        if (dateMatch) {
+          const date = new Date(dateMatch[1]);
+          return isNaN(date.getTime()) ? null : date.toISOString().split('T')[0];
+        }
+        return null;
+
+      case 'boolean':
+        const lowerValue = value.toLowerCase();
+        if (['yes', 'true', '1', 'y'].includes(lowerValue)) return true;
+        if (['no', 'false', '0', 'n'].includes(lowerValue)) return false;
+        return null;
+
+      case 'email':
+        const emailMatch = value.match(/[\w.-]+@[\w.-]+\.\w+/);
+        return emailMatch ? emailMatch[0] : null;
+
+      case 'phone':
+        const phoneMatch = value.match(/[\+]?[\d\s\-\(\)]{10,}/);
+        return phoneMatch ? phoneMatch[0].trim() : null;
+
+      case 'url':
+        const urlMatch = value.match(/https?:\/\/[^\s]+/);
+        return urlMatch ? urlMatch[0] : null;
+
+      default:
+        // For text and other types, clean up the value
+        return value.trim().substring(0, 500); // Limit text length
+    }
+  }
+
+  // Hybrid extraction method combining AI and patterns
+  async extractWithHybridApproach(content, customColumns = []) {
+    console.log(`🔄 Using hybrid extraction approach...`);
+
+    const results = {};
+
+    // First, try pattern-based extraction (fast and cheap)
+    const patternResults = this.extractWithPatterns(content);
+
+    // Then, use AI for custom columns and missing data
+    const aiResults = await this.extractWithCustomColumns(content, customColumns);
+
+    // Merge results, preferring AI for custom columns
+    Object.assign(results, patternResults, aiResults);
+
+    // Validate and clean results
+    for (const [key, value] of Object.entries(results)) {
+      if (value === 'Unknown' || value === 'N/A' || value === '') {
+        results[key] = null;
+      }
+    }
+
+    return results;
+  }
+
+  // Cost optimization methods
+  optimizeContentForAI(content) {
+    // Remove unnecessary content to reduce token usage
+    let optimized = content
+      .replace(/\s+/g, ' ') // Normalize whitespace
+      .replace(/[^\w\s.,!?-]/g, '') // Remove special characters
+      .trim();
+
+    // Limit content length while preserving important information
+    const maxLength = Math.min(optimized.length, 3000);
+    optimized = optimized.substring(0, maxLength);
+
+    // Ensure we don't cut in the middle of a sentence
+    const lastSentenceEnd = optimized.lastIndexOf('.');
+    if (lastSentenceEnd > maxLength * 0.8) {
+      optimized = optimized.substring(0, lastSentenceEnd + 1);
+    }
+
+    return optimized;
+  }
+
+  // Batch processing for cost efficiency
+  async extractMultipleContacts(content, maxContacts = 3) {
+    if (!this.deepseekApiKey || !content) {
+      return [];
+    }
+
+    try {
+      const prompt = `Extract up to ${maxContacts} contact persons from the following article. For each contact, provide: name, title, company, email, phone.
+
+Return the results as a JSON array in this format:
+[{"name": "John Doe", "title": "CEO", "company": "ABC Corp", "email": "john@abc.com", "phone": "123-456-7890"}]
+
+Article:
+${this.optimizeContentForAI(content)}
+
+Return only the JSON array, no additional text.`;
+
+      const response = await this.callDeepseekAPI(prompt);
+
+      try {
+        const contacts = JSON.parse(response);
+        return Array.isArray(contacts) ? contacts.slice(0, maxContacts) : [];
+      } catch (parseError) {
+        console.warn(`⚠️ Failed to parse contact extraction JSON: ${parseError.message}`);
+        return [];
+      }
+    } catch (error) {
+      console.warn(`⚠️ Contact extraction failed: ${error.message}`);
+      return [];
+    }
   }
 }
 

@@ -507,6 +507,129 @@ router.get('/diagnostics', auth, async (req, res) => {
   }
 });
 
+// @route   GET /api/scraping/health
+// @desc    Get scraping service health report
+// @access  Private
+router.get('/health', auth, async (req, res) => {
+  try {
+    const { EnhancedScrapingService } = require('../services/enhancedScrapingService');
+    const service = new EnhancedScrapingService();
+    const healthReport = service.getHealthReport();
+
+    res.json({
+      success: true,
+      health: healthReport,
+      timestamp: new Date().toISOString()
+    });
+  } catch (error) {
+    console.error('❌ Health check error:', error);
+    res.status(500).json({
+      error: 'Failed to get health report',
+      details: error.message
+    });
+  }
+});
+
+// @route   GET /api/scraping/error-recovery
+// @desc    Get error recovery analysis and recommendations
+// @access  Private
+router.get('/error-recovery', auth, async (req, res) => {
+  try {
+    const { EnhancedScrapingService } = require('../services/enhancedScrapingService');
+    const service = new EnhancedScrapingService();
+    const errorRecovery = service.getErrorRecovery();
+
+    res.json({
+      success: true,
+      errorRecovery,
+      timestamp: new Date().toISOString()
+    });
+  } catch (error) {
+    console.error('❌ Error recovery check error:', error);
+    res.status(500).json({
+      error: 'Failed to get error recovery report',
+      details: error.message
+    });
+  }
+});
+
+// @route   POST /api/scraping/recovery
+// @desc    Attempt error recovery
+// @access  Private
+router.post('/recovery', auth, async (req, res) => {
+  try {
+    const { EnhancedScrapingService } = require('../services/enhancedScrapingService');
+    const service = new EnhancedScrapingService();
+    const recovery = await service.attemptRecovery();
+
+    res.json({
+      success: true,
+      recovery,
+      timestamp: new Date().toISOString()
+    });
+  } catch (error) {
+    console.error('❌ Recovery attempt error:', error);
+    res.status(500).json({
+      error: 'Failed to attempt recovery',
+      details: error.message
+    });
+  }
+});
+
+// @route   GET /api/scraping/engine-status
+// @desc    Get status of all search engines
+// @access  Private
+router.get('/engine-status', auth, async (req, res) => {
+  try {
+    const { EnhancedScrapingService } = require('../services/enhancedScrapingService');
+    const service = new EnhancedScrapingService();
+    const engineStatus = service.getEngineStatus();
+
+    res.json({
+      success: true,
+      engines: engineStatus,
+      timestamp: new Date().toISOString()
+    });
+  } catch (error) {
+    console.error('❌ Engine status error:', error);
+    res.status(500).json({
+      error: 'Failed to get engine status',
+      details: error.message
+    });
+  }
+});
+
+// @route   POST /api/scraping/run-tests
+// @desc    Run comprehensive scraping system tests
+// @access  Private
+router.post('/run-tests', auth, async (req, res) => {
+  try {
+    console.log('🧪 Running comprehensive scraping system tests...');
+
+    const ScrapingSystemTester = require('../test_enhanced_scraping');
+    const tester = new ScrapingSystemTester();
+    const results = await tester.runAllTests();
+
+    res.json({
+      success: true,
+      testResults: results,
+      summary: {
+        passed: results.passed,
+        failed: results.failed,
+        total: results.passed + results.failed,
+        successRate: `${((results.passed / (results.passed + results.failed)) * 100).toFixed(1)}%`
+      },
+      timestamp: new Date().toISOString()
+    });
+  } catch (error) {
+    console.error('❌ Test execution failed:', error);
+    res.status(500).json({
+      error: 'Test execution failed',
+      details: error.message
+    });
+  }
+});
+
 // @route   POST /api/scraping/test-custom-columns
 // @desc    Test custom columns integration
 // @access  Private
