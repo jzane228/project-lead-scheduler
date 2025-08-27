@@ -426,4 +426,107 @@ function calculateNextRun(frequency) {
   return next_run;
 }
 
+// @route   POST /api/scraping/test-custom-columns
+// @desc    Test custom columns integration
+// @access  Private
+router.post('/test-custom-columns', auth, async (req, res) => {
+  try {
+    console.log('🧪 Testing custom columns integration...');
+
+    // Get user's custom columns
+    const { Column, Lead } = require('../models');
+    const customColumns = await Column.findVisibleByUser(req.user.userId);
+    console.log(`📊 Found ${customColumns.length} custom columns`);
+
+    // Test article content
+    const testContent = `
+    Tech Startup Raises $15 Million in Series A Funding
+
+    San Francisco - InnovateLab, a cutting-edge AI startup, announced today that it has secured $15 million in Series A funding. The round was led by Sequoia Capital with participation from Andreessen Horowitz.
+
+    CEO Jane Rodriguez stated, "We're thrilled to have the support of these world-class investors. This funding will allow us to expand our team from 25 to 75 employees and accelerate our product development timeline."
+
+    The company plans to use the funds for:
+    - Hiring 50 new engineers and designers
+    - Expanding office space to 10,000 square feet
+    - Launching new AI features by Q3 2024
+    - International expansion to Europe and Asia
+
+    Contact Information:
+    - CEO: Jane Rodriguez (jane@innovatelab.com)
+    - Phone: (415) 555-0123
+    - Investor Relations: Michael Chen (michael@innovatelab.com)
+
+    For press inquiries, contact:
+    Sarah Williams
+    Head of Communications
+    sarah.williams@innovatelab.com
+    Phone: (415) 555-0124
+
+    Website: www.innovatelab.com
+    `;
+
+    const EnhancedScrapingService = require('../services/enhancedScrapingService');
+    const scrapingService = new EnhancedScrapingService();
+
+    // Test extraction
+    let extractedData = {};
+    if (customColumns.length > 0) {
+      console.log('🤖 Testing AI extraction with custom columns...');
+      extractedData = await scrapingService.extractWithAI(testContent, {}, customColumns);
+    } else {
+      console.log('📊 No custom columns found, using standard extraction...');
+      extractedData = scrapingService.dataExtractionService.extractAllData(testContent);
+    }
+
+    // Test lead creation
+    const testLeadData = {
+      title: 'Test Tech Startup Funding',
+      description: 'AI startup raises $15M in Series A funding',
+      company: 'InnovateLab',
+      url: 'https://example.com/test-article',
+      publishedDate: new Date(),
+      extractedData: {
+        ...extractedData,
+        aiUsed: customColumns.length > 0
+      }
+    };
+
+    const savedLeads = await scrapingService.saveLeads([testLeadData], req.user.userId, null, customColumns);
+
+    if (savedLeads.length > 0) {
+      const savedLead = savedLeads[0];
+
+      // Return test results
+      res.json({
+        success: true,
+        message: 'Custom columns integration test completed',
+        results: {
+          customColumnsCount: customColumns.length,
+          extractedData,
+          savedLead: {
+            id: savedLead.id,
+            custom_fields: savedLead.custom_fields
+          },
+          customFieldsExtracted: customColumns.map(col => ({
+            name: col.name,
+            field_key: col.field_key,
+            extracted_value: extractedData[col.field_key],
+            saved_value: savedLead.custom_fields[col.field_key]
+          }))
+        }
+      });
+    } else {
+      res.status(500).json({ error: 'Failed to save test lead' });
+    }
+
+  } catch (error) {
+    console.error('❌ Custom columns test failed:', error);
+    res.status(500).json({
+      error: 'Custom columns test failed',
+      details: error.message
+    });
+  }
+});
+
 module.exports = router;

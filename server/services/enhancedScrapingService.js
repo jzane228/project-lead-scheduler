@@ -162,7 +162,7 @@ class EnhancedScrapingService {
       // Save leads to database
       console.log(`💾 Attempting to save ${processedResults.length} leads...`);
       this.updateProgress(jobId, 'saving', 0, processedResults.length, 'Saving leads to database...');
-      const savedLeads = await this.saveLeads(processedResults, userId, config);
+      const savedLeads = await this.saveLeads(processedResults, userId, config, customColumns);
 
       console.log(`🎉 Successfully saved ${savedLeads.length} leads.`);
 
@@ -1056,7 +1056,7 @@ class EnhancedScrapingService {
     return extracted;
   }
 
-  async saveLeads(processedResults, userId, config) {
+  async saveLeads(processedResults, userId, config, customColumns = []) {
     const savedLeads = [];
 
     for (let i = 0; i < processedResults.length; i++) {
@@ -1071,8 +1071,62 @@ class EnhancedScrapingService {
           type: this.getLeadSourceType(result.source, result.url)
         });
 
-        // Build comprehensive custom fields from extracted data
+        // Build comprehensive custom fields from extracted data and custom columns
         const customFields = {};
+
+        // Process custom columns dynamically
+        customColumns.forEach(column => {
+          const fieldKey = column.field_key;
+          const extractedValue = result.extractedData[fieldKey];
+
+          // Only save non-empty values
+          if (extractedValue !== undefined && extractedValue !== null && extractedValue !== 'Unknown' && extractedValue !== '') {
+            // Validate and format based on data type
+            let processedValue = extractedValue;
+
+            switch (column.data_type) {
+              case 'currency':
+                // Ensure currency values are numbers
+                if (typeof extractedValue === 'string') {
+                  const numericValue = extractedValue.replace(/[^\d.-]/g, '');
+                  processedValue = isNaN(numericValue) ? null : parseFloat(numericValue);
+                }
+                break;
+
+              case 'number':
+                processedValue = typeof extractedValue === 'string'
+                  ? (isNaN(extractedValue) ? null : parseFloat(extractedValue))
+                  : extractedValue;
+                break;
+
+              case 'boolean':
+                processedValue = ['true', 'yes', '1', true, 1].includes(extractedValue)
+                  ? true
+                  : ['false', 'no', '0', false, 0].includes(extractedValue)
+                  ? false
+                  : null;
+                break;
+
+              case 'date':
+                if (typeof extractedValue === 'string') {
+                  const date = new Date(extractedValue);
+                  processedValue = isNaN(date.getTime()) ? null : date.toISOString().split('T')[0];
+                }
+                break;
+
+              default:
+                // For text, email, phone, url - keep as string but trim
+                processedValue = typeof extractedValue === 'string' ? extractedValue.trim() : extractedValue;
+            }
+
+            if (processedValue !== null) {
+              customFields[fieldKey] = processedValue;
+              console.log(`📝 Saved custom field ${fieldKey}: ${processedValue} (${column.data_type})`);
+            }
+          }
+        });
+
+        // Legacy hardcoded fields for backward compatibility (these will be gradually phased out)
         if (result.extractedData.roomCount) customFields.roomCount = result.extractedData.roomCount;
         if (result.extractedData.squareFootage) customFields.squareFootage = result.extractedData.squareFootage;
         if (result.extractedData.employees) customFields.employees = result.extractedData.employees;

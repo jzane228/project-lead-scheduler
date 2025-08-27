@@ -682,7 +682,17 @@ const Leads = () => {
                               ?.filter(column => column.is_visible && !['title', 'description', 'status', 'priority'].includes(column.field_key))
                               ?.slice(0, 6) // Limit to 6 fields for card layout
                               ?.map(column => {
-                                const value = lead[column.field_key] || lead.custom_fields?.[column.field_key];
+                                // Check both direct field and custom_fields JSONB
+                                let value = lead[column.field_key];
+                                if (!value && lead.custom_fields) {
+                                  value = lead.custom_fields[column.field_key];
+                                }
+
+                                // Only show fields that have values
+                                if (!value || value === 'Unknown' || value === '') {
+                                  return null;
+                                }
+
                                 return (
                                   <div key={column.id}>
                                     <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">{column.name}</p>
@@ -691,7 +701,9 @@ const Leads = () => {
                                     </p>
                                   </div>
                                 );
-                              })}
+                              })
+                              ?.filter(Boolean) // Remove null entries from fields without values
+                            }
 
                             {/* Always show source and URL if not already included */}
                             {!columnsData?.columns?.some(col => col.field_key === 'source' && col.is_visible) && (
