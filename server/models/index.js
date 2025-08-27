@@ -33,6 +33,7 @@ const LeadSourceFactory = require('./LeadSource');
 const ExportScheduleFactory = require('./ExportSchedule');
 const CRMIntegrationFactory = require('./CRMIntegration');
 const TagFactory = require('./Tag');
+const ColumnFactory = require('./Column');
 
 // Instantiate models
 const User = UserFactory(sequelize);
@@ -43,6 +44,7 @@ const LeadSource = LeadSourceFactory(sequelize);
 const ExportSchedule = ExportScheduleFactory(sequelize);
 const CRMIntegration = CRMIntegrationFactory(sequelize);
 const Tag = TagFactory(sequelize);
+const Column = ColumnFactory(sequelize);
 
 // Define associations
 User.belongsTo(Industry, { foreignKey: 'industry_id', as: 'industry' });
@@ -73,15 +75,33 @@ Lead.belongsTo(Industry, { foreignKey: 'industry_id', as: 'industry' });
 Industry.hasMany(Lead, { foreignKey: 'industry_id', as: 'leads' });
 
 // Many-to-many relationship between Lead and Tag
-Lead.belongsToMany(Tag, { 
-  through: 'LeadTags', 
-  foreignKey: 'lead_id', 
+Lead.belongsToMany(Tag, {
+  through: 'LeadTags',
+  foreignKey: 'lead_id',
   otherKey: 'tag_id',
   as: 'tags'
 });
-Tag.belongsToMany(Lead, { 
-  through: 'LeadTags', 
-  foreignKey: 'tag_id', 
+Tag.belongsToMany(Lead, {
+  through: 'LeadTags',
+  foreignKey: 'tag_id',
+  otherKey: 'lead_id',
+  as: 'leads'
+});
+
+// Column associations
+User.hasMany(Column, { foreignKey: 'user_id', as: 'columns' });
+Column.belongsTo(User, { foreignKey: 'user_id', as: 'user' });
+
+// Many-to-many relationship between Lead and Column (for tracking which columns are used)
+Lead.belongsToMany(Column, {
+  through: 'LeadColumns',
+  foreignKey: 'lead_id',
+  otherKey: 'column_id',
+  as: 'columns'
+});
+Column.belongsToMany(Lead, {
+  through: 'LeadColumns',
+  foreignKey: 'column_id',
   otherKey: 'lead_id',
   as: 'leads'
 });
@@ -95,5 +115,6 @@ module.exports = {
   LeadSource,
   ExportSchedule,
   CRMIntegration,
-  Tag
+  Tag,
+  Column
 };

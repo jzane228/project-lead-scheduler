@@ -12,9 +12,11 @@ import {
   TrashIcon,
   CheckIcon,
   ChevronDownIcon,
-  ChevronUpIcon
+  ChevronUpIcon,
+  ViewColumnsIcon
 } from '@heroicons/react/24/outline';
 import axios from 'axios';
+import ColumnManager from './ColumnManager';
 
 const Leads = () => {
   const [selectedLeads, setSelectedLeads] = useState([]);
@@ -35,6 +37,7 @@ const Leads = () => {
   const [editingLead, setEditingLead] = useState(null);
   const [showGroupModal, setShowGroupModal] = useState(false);
   const [groupName, setGroupName] = useState('');
+  const [showColumnManager, setShowColumnManager] = useState(false);
 
   const queryClient = useQueryClient();
 
@@ -77,6 +80,15 @@ const Leads = () => {
     ['leadGroups'],
     async () => {
       const response = await axios.get('/api/leads/groups');
+      return response.data;
+    }
+  );
+
+  // Fetch visible columns for dynamic table
+  const { data: columnsData } = useQuery(
+    ['visibleColumns'],
+    async () => {
+      const response = await axios.get('/api/columns/visible');
       return response.data;
     }
   );
@@ -278,6 +290,13 @@ const Leads = () => {
           <p className="text-gray-600">Manage and organize your leads</p>
         </div>
         <div className="flex space-x-3">
+          <button
+            onClick={() => setShowColumnManager(true)}
+            className="inline-flex items-center px-3 py-2 border border-gray-300 shadow-sm text-sm leading-4 font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+          >
+            <ViewColumnsIcon className="h-4 w-4 mr-2" />
+            Columns
+          </button>
           <button
             onClick={() => setShowCreateModal(true)}
             className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
@@ -650,31 +669,60 @@ const Leads = () => {
                             {lead.description || 'No description available'}
                           </p>
 
-                          <div className="mt-3 grid grid-cols-1 md:grid-cols-3 gap-4">
-                            <div>
-                              <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">Company</p>
-                              <p className="mt-1 text-sm text-gray-900">{lead.company || 'N/A'}</p>
-                            </div>
-                            <div>
-                              <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">Location</p>
-                              <p className="mt-1 text-sm text-gray-900">{lead.location || 'N/A'}</p>
-                            </div>
-                            <div>
-                              <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">Source</p>
-                              <p className="mt-1 text-sm text-gray-900">
-                                {lead.source?.name || 'Unknown'}
-                                {lead.url && (
+                          {/* Dynamic Fields Grid */}
+                          <div className="mt-3 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                            {/* Render visible columns dynamically */}
+                            {columnsData?.columns
+                              ?.filter(column => column.is_visible && !['title', 'description', 'status', 'priority'].includes(column.field_key))
+                              ?.slice(0, 6) // Limit to 6 fields for card layout
+                              ?.map(column => {
+                                const value = lead[column.field_key] || lead.custom_fields?.[column.field_key];
+                                return (
+                                  <div key={column.id}>
+                                    <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">{column.name}</p>
+                                    <p className="mt-1 text-sm text-gray-900">
+                                      {renderCellValue(value, column.data_type)}
+                                    </p>
+                                  </div>
+                                );
+                              })}
+
+                            {/* Always show source and URL if not already included */}
+                            {!columnsData?.columns?.some(col => col.field_key === 'source' && col.is_visible) && (
+                              <div>
+                                <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">Source</p>
+                                <p className="mt-1 text-sm text-gray-900">
+                                  {lead.source?.name || 'Unknown'}
+                                  {lead.url && (
+                                    <a
+                                      href={lead.url}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      className="ml-2 text-indigo-600 hover:text-indigo-500"
+                                    >
+                                      (View)
+                                    </a>
+                                  )}
+                                </p>
+                              </div>
+                            )}
+
+                            {/* Show URL separately if columns don't include it */}
+                            {lead.url && !columnsData?.columns?.some(col => col.field_key === 'url' && col.is_visible) && (
+                              <div>
+                                <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">Article URL</p>
+                                <p className="mt-1 text-sm text-gray-900">
                                   <a
                                     href={lead.url}
                                     target="_blank"
                                     rel="noopener noreferrer"
-                                    className="ml-2 text-indigo-600 hover:text-indigo-500"
+                                    className="text-indigo-600 hover:text-indigo-500 underline"
                                   >
-                                    (View)
+                                    View Article
                                   </a>
-                                )}
-                              </p>
-                            </div>
+                                </p>
+                              </div>
+                            )}
                           </div>
 
                           <div className="mt-4 flex items-center justify-between text-sm text-gray-500">
@@ -781,8 +829,76 @@ const Leads = () => {
           onSubmit={handleBulkGroupUpdate}
         />
       )}
+
+      {/* Column Manager */}
+      <ColumnManager
+        isOpen={showColumnManager}
+        onClose={() => setShowColumnManager(false)}
+      />
     </div>
   );
+};
+
+// Helper function to render cell values based on data type
+const renderCellValue = (value, dataType) => {
+  if (value === null || value === undefined || value === 'Unknown') {
+    return <span className="text-gray-400 italic">Not available</span>;
+  }
+
+  switch (dataType) {
+    case 'currency':
+      const numValue = parseFloat(value);
+      if (!isNaN(numValue)) {
+        return new Intl.NumberFormat('en-US', {
+          style: 'currency',
+          currency: 'USD',
+          minimumFractionDigits: 0,
+          maximumFractionDigits: 0
+        }).format(numValue);
+      }
+      return value;
+
+    case 'number':
+      const parsed = parseFloat(value);
+      return !isNaN(parsed) ? parsed.toLocaleString() : value;
+
+    case 'date':
+      try {
+        return new Date(value).toLocaleDateString();
+      } catch {
+        return value;
+      }
+
+    case 'boolean':
+      return value === true || value === 'true' ?
+        <span className="text-green-600 font-medium">Yes</span> :
+        <span className="text-red-600 font-medium">No</span>;
+
+    case 'url':
+      return (
+        <a
+          href={value}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="text-blue-600 hover:text-blue-800 underline"
+        >
+          {value.length > 30 ? value.substring(0, 30) + '...' : value}
+        </a>
+      );
+
+    case 'email':
+      return (
+        <a
+          href={`mailto:${value}`}
+          className="text-blue-600 hover:text-blue-800 underline"
+        >
+          {value}
+        </a>
+      );
+
+    default:
+      return String(value);
+  }
 };
 
 // Create Lead Modal Component

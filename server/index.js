@@ -18,6 +18,7 @@ const dashboardRoutes = require('./routes/dashboard');
 const industryRoutes = require('./routes/industries');
 const tagsRoutes = require('./routes/tags');
 const settingsRoutes = require('./routes/settings');
+const columnsRoutes = require('./routes/columns');
 
 // Import database connection
 const { sequelize } = require('./models');
@@ -98,6 +99,7 @@ app.use('/api/dashboard', dashboardRoutes);
 app.use('/api/industries', industryRoutes);
 app.use('/api/tags', tagsRoutes);
 app.use('/api/settings', settingsRoutes);
+app.use('/api/columns', columnsRoutes);
 app.use('/api/analytics', require('./routes/analytics'));
 
 // Error handling middleware
