@@ -14,5 +14,16 @@ services:
         generateValue: true
       - key: CORS_ORIGIN
         value: "*"
+      # Database Configuration (you'll need to set these manually)
+      - key: DB_HOST
+        value: "YOUR_DB_HOST_FROM_RENDER"
+      - key: DB_PORT
+        value: "5432"
+      - key: DB_NAME
+        value: "lead_generator"
+      - key: DB_USER
+        value: "YOUR_DB_USER_FROM_RENDER"
+      - key: DB_PASSWORD
+        value: "YOUR_DB_PASSWORD_FROM_RENDER"
     healthCheckPath: /api/health
     autoDeploy: true
