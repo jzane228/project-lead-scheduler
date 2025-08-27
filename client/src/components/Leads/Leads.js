@@ -558,43 +558,7 @@ const Leads = () => {
           </div>
         ) : (
           <>
-            {/* Debug Panel - Remove this in production */}
-            <div className="mb-4 p-4 bg-yellow-50 border border-yellow-200 rounded-md">
-              <h3 className="text-sm font-medium text-yellow-800 mb-2">🔍 Debug Info (Development Only)</h3>
-              <div className="text-xs text-yellow-700 space-y-1">
-                <p><strong>Loading:</strong> {isLoading ? 'Yes' : 'No'}</p>
-                <p><strong>Error:</strong> {error ? error.message : 'None'}</p>
-                <p><strong>Leads Count:</strong> {leadsData?.leads?.length || 0}</p>
-                <p><strong>Data Structure:</strong> {leadsData ? 'Valid' : 'Null'}</p>
-                <p><strong>Auth Token:</strong> {localStorage.getItem('token') ? 'Present' : 'Missing'}</p>
-                <div className="mt-2">
-                  <button
-                    onClick={async () => {
-                      try {
-                        console.log('Manual test: Fetching leads...');
-                        const response = await axios.get('/api/leads-auth');
-                        console.log('Manual test response:', response.data);
-                        alert('Success! Check console for response data.');
-                      } catch (err) {
-                        console.error('Manual test error:', err);
-                        alert(`Error: ${err.response?.data?.error || err.message}`);
-                      }
-                    }}
-                    className="px-3 py-1 bg-yellow-600 text-white text-xs rounded hover:bg-yellow-700"
-                  >
-                    Test API Call
-                  </button>
-                </div>
-                {leadsData && (
-                  <details>
-                    <summary className="cursor-pointer">Raw API Response</summary>
-                    <pre className="mt-2 p-2 bg-white rounded text-xs overflow-auto">
-                      {JSON.stringify(leadsData, null, 2)}
-                    </pre>
-                  </details>
-                )}
-              </div>
-            </div>
+
 
             {leadsData?.leads?.length === 0 ? (
               <div className="px-4 py-8 text-center">
@@ -604,162 +568,181 @@ const Leads = () => {
               </div>
             ) : (
           <>
-            <table className="min-w-full divide-y divide-gray-200">
-              <thead className="bg-gray-50">
-                <tr>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    <input
-                      type="checkbox"
-                      checked={selectedLeads.length === leadsData?.leads?.length}
-                      onChange={handleSelectAll}
-                      className="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded"
-                    />
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Lead
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Company
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Status
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Priority
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Group
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Created
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Actions
-                  </th>
-                </tr>
-              </thead>
-              <tbody className="bg-white divide-y divide-gray-200">
-                {leadsData?.leads?.map((lead) => (
-                  <tr key={lead.id} className="hover:bg-gray-50">
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <input
-                        type="checkbox"
-                        checked={selectedLeads.includes(lead.id)}
-                        onChange={() => handleLeadSelection(lead.id)}
-                        className="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded"
-                      />
-                    </td>
-                    <td className="px-6 py-4">
-                      <div className="flex items-center">
-                        <div className="flex-shrink-0 h-10 w-10">
-                          <div className="h-10 w-10 rounded-full bg-indigo-100 flex items-center justify-center">
-                            <span className="text-sm font-medium text-indigo-600">
-                              {lead.title.charAt(0).toUpperCase()}
+            {/* Bulk Actions */}
+            <div className="mb-4 flex items-center justify-between">
+              <div className="flex items-center space-x-4">
+                <label className="flex items-center">
+                  <input
+                    type="checkbox"
+                    checked={selectedLeads.length === leadsData?.leads?.length}
+                    onChange={handleSelectAll}
+                    className="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded"
+                  />
+                  <span className="ml-2 text-sm text-gray-900">Select All</span>
+                </label>
+                <span className="text-sm text-gray-500">
+                  {selectedLeads.length} of {leadsData?.leads?.length} selected
+                </span>
+              </div>
+
+              {selectedLeads.length > 0 && (
+                <div className="flex items-center space-x-2">
+                  <button
+                    onClick={handleBulkStatusUpdate}
+                    className="inline-flex items-center px-3 py-2 border border-gray-300 shadow-sm text-sm leading-4 font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+                  >
+                    Update Status
+                  </button>
+                  <button
+                    onClick={handleBulkPriorityUpdate}
+                    className="inline-flex items-center px-3 py-2 border border-gray-300 shadow-sm text-sm leading-4 font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+                  >
+                    Update Priority
+                  </button>
+                  <button
+                    onClick={handleBulkGroupUpdate}
+                    className="inline-flex items-center px-3 py-2 border border-gray-300 shadow-sm text-sm leading-4 font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+                  >
+                    Add to Group
+                  </button>
+                </div>
+              )}
+            </div>
+
+            {/* Leads List */}
+            <div className="space-y-4">
+              {leadsData.leads.map((lead, index) => (
+                <div key={lead.id} className="bg-white shadow rounded-lg border border-gray-200 hover:shadow-md transition-shadow">
+                  <div className="p-6">
+                    <div className="flex items-start justify-between">
+                      <div className="flex items-start space-x-4 flex-1">
+                        <input
+                          type="checkbox"
+                          checked={selectedLeads.includes(lead.id)}
+                          onChange={() => handleLeadSelection(lead.id)}
+                          className="mt-1 h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded"
+                        />
+
+                        <div className="flex-shrink-0">
+                          <div className="h-12 w-12 rounded-full bg-indigo-100 flex items-center justify-center">
+                            <span className="text-lg font-semibold text-indigo-600">
+                              {lead.title?.charAt(0)?.toUpperCase() || (index + 1).toString()}
                             </span>
                           </div>
                         </div>
-                        <div className="ml-4">
-                          <div className="text-sm font-medium text-gray-900">
-                            {lead.title}
+
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center justify-between">
+                            <h3 className="text-lg font-semibold text-gray-900 truncate">
+                              {lead.title || 'Untitled Lead'}
+                            </h3>
+                            <div className="flex items-center space-x-2">
+                              <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getStatusColor(lead.status)}`}>
+                                {lead.status || 'new'}
+                              </span>
+                              <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getPriorityColor(lead.priority)}`}>
+                                {lead.priority || 'medium'}
+                              </span>
+                            </div>
                           </div>
-                          <div className="text-sm text-gray-500">
-                            {lead.description?.substring(0, 100)}...
+
+                          <p className="mt-1 text-sm text-gray-600 line-clamp-2">
+                            {lead.description || 'No description available'}
+                          </p>
+
+                          <div className="mt-3 grid grid-cols-1 md:grid-cols-3 gap-4">
+                            <div>
+                              <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">Company</p>
+                              <p className="mt-1 text-sm text-gray-900">{lead.company || 'N/A'}</p>
+                            </div>
+                            <div>
+                              <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">Location</p>
+                              <p className="mt-1 text-sm text-gray-900">{lead.location || 'N/A'}</p>
+                            </div>
+                            <div>
+                              <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">Source</p>
+                              <p className="mt-1 text-sm text-gray-900">
+                                {lead.source?.name || 'Unknown'}
+                                {lead.url && (
+                                  <a
+                                    href={lead.url}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="ml-2 text-indigo-600 hover:text-indigo-500"
+                                  >
+                                    (View)
+                                  </a>
+                                )}
+                              </p>
+                            </div>
+                          </div>
+
+                          <div className="mt-4 flex items-center justify-between text-sm text-gray-500">
+                            <div className="flex items-center space-x-4">
+                              <span>Group: {lead.group || 'None'}</span>
+                              <span>•</span>
+                              <span>Created: {new Date(lead.createdAt).toLocaleDateString()}</span>
+                              {lead.published_at && (
+                                <>
+                                  <span>•</span>
+                                  <span>Published: {new Date(lead.published_at).toLocaleDateString()}</span>
+                                </>
+                              )}
+                            </div>
+
+                            <div className="flex items-center space-x-2">
+                              <button
+                                onClick={() => handleEditLead(lead)}
+                                className="text-indigo-600 hover:text-indigo-900 text-sm font-medium"
+                              >
+                                Edit
+                              </button>
+                              <button
+                                onClick={() => handleDeleteLead(lead.id)}
+                                className="text-red-600 hover:text-red-900 text-sm font-medium"
+                              >
+                                Delete
+                              </button>
+                            </div>
                           </div>
                         </div>
                       </div>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="text-sm text-gray-900">{lead.company || 'N/A'}</div>
-                      <div className="text-sm text-gray-500">{lead.location || 'N/A'}</div>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getStatusColor(lead.status)}`}>
-                        {lead.status}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getPriorityColor(lead.priority)}`}>
-                        {lead.priority}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="text-sm text-gray-900">{lead.group || 'Ungrouped'}</div>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                      {new Date(lead.createdAt).toLocaleDateString()}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                      <div className="flex space-x-2">
-                        <button
-                          onClick={() => handleEditLead(lead)}
-                          className="text-indigo-600 hover:text-indigo-900"
-                        >
-                          <PencilIcon className="h-4 w-4" />
-                        </button>
-                        <button
-                          onClick={() => handleDeleteLead(lead.id)}
-                          className="text-red-600 hover:text-red-900"
-                        >
-                          <TrashIcon className="h-4 w-4" />
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+                    </div>
+                  </div>
+                </div>
+              ))}
+
+            </div>
 
             {/* Pagination */}
-            {leadsData?.pagination && (
-              <div className="bg-white px-4 py-3 flex items-center justify-between border-t border-gray-200 sm:px-6">
-                <div className="flex-1 flex justify-between sm:hidden">
+            {leadsData.pagination && leadsData.pagination.totalPages > 1 && (
+              <div className="mt-8 flex items-center justify-between">
+                <div className="text-sm text-gray-700">
+                  Showing {((leadsData.pagination.currentPage - 1) * leadsData.pagination.limit) + 1} to{' '}
+                  {Math.min(leadsData.pagination.currentPage * leadsData.pagination.limit, leadsData.pagination.totalItems)} of{' '}
+                  {leadsData.pagination.totalItems} results
+                </div>
+
+                <div className="flex items-center space-x-2">
                   <button
-                    onClick={() => setCurrentPage(currentPage - 1)}
+                    onClick={() => handlePageChange(leadsData.pagination.currentPage - 1)}
                     disabled={!leadsData.pagination.hasPrevPage}
-                    className="relative inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                    className="px-3 py-2 text-sm font-medium text-gray-500 bg-white border border-gray-300 rounded-md hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     Previous
                   </button>
+
+                  <span className="px-3 py-2 text-sm font-medium text-gray-900 bg-gray-100 border border-gray-300 rounded-md">
+                    {leadsData.pagination.currentPage} of {leadsData.pagination.totalPages}
+                  </span>
+
                   <button
-                    onClick={() => setCurrentPage(currentPage + 1)}
+                    onClick={() => handlePageChange(leadsData.pagination.currentPage + 1)}
                     disabled={!leadsData.pagination.hasNextPage}
-                    className="ml-3 relative inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                    className="px-3 py-2 text-sm font-medium text-gray-500 bg-white border border-gray-300 rounded-md hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     Next
                   </button>
-                </div>
-                <div className="hidden sm:flex-1 sm:flex sm:items-center sm:justify-between">
-                  <div>
-                    <p className="text-sm text-gray-700">
-                      Showing{' '}
-                      <span className="font-medium">{(currentPage - 1) * 20 + 1}</span>
-                      {' '}to{' '}
-                      <span className="font-medium">
-                        {Math.min(currentPage * 20, leadsData.pagination.totalItems)}
-                      </span>
-                      {' '}of{' '}
-                      <span className="font-medium">{leadsData.pagination.totalItems}</span>
-                      {' '}results
-                    </p>
-                  </div>
-                  <div>
-                    <nav className="relative z-0 inline-flex rounded-md shadow-sm -space-x-px">
-                      <button
-                        onClick={() => setCurrentPage(currentPage - 1)}
-                        disabled={!leadsData.pagination.hasPrevPage}
-                        className="relative inline-flex items-center px-2 py-2 rounded-l-md border border-gray-300 bg-white text-sm font-medium text-gray-500 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
-                      >
-                        Previous
-                      </button>
-                      <button
-                        onClick={() => setCurrentPage(currentPage + 1)}
-                        disabled={!leadsData.pagination.hasNextPage}
-                        className="relative inline-flex items-center px-2 py-2 rounded-r-md border border-gray-300 bg-white text-sm font-medium text-gray-500 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
-                      >
-                        Next
-                      </button>
-                    </nav>
-                  </div>
                 </div>
               </div>
             )}
