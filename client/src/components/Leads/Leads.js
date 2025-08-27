@@ -50,7 +50,7 @@ const Leads = () => {
         ...filters
       });
       
-      const response = await axios.get(`/api/leads?${params}`);
+      const response = await axios.get(`/api/leads-auth?${params}`);
       return response.data;
     },
     {

@@ -48,7 +48,7 @@ const CRMIntegrationInterface = () => {
   const { data: leads, isLoading: leadsLoading } = useQuery(
     'leads-for-sync',
     async () => {
-      const response = await axios.get('/api/leads');
+      const response = await axios.get('/api/leads-auth');
       return response.data.leads || [];
     }
   );

@@ -17,7 +17,6 @@ const Register = () => {
   const [error, setError] = useState('');
   const [validationErrors, setValidationErrors] = useState({});
 
-  const { register } = useAuth();
   const navigate = useNavigate();
 
   const handleChange = (e) => {

@@ -110,6 +110,11 @@ class ScrapyService {
 
   parseScrapyResponse(html, url) {
     try {
+      // Validate HTML content
+      if (!html || typeof html !== 'string' || html.trim().length === 0) {
+        throw new Error('Invalid or empty HTML content');
+      }
+
       const $ = cheerio.load(html);
       
       // Remove script and style elements
@@ -278,16 +283,35 @@ class ScrapyService {
           );
           
           if (hasKeyword) {
-            // Resolve relative URLs
-            const absoluteUrl = link.startsWith('http') ? link : new URL(link, content.url).href;
-            
-            items.push({
-              title,
-              url: absoluteUrl,
-              source: new URL(content.url).hostname,
-              snippet: description || title,
-              publishedDate: new Date()
-            });
+            let absoluteUrl;
+
+            try {
+              if (link.startsWith('http')) {
+                absoluteUrl = link;
+              } else if (link.startsWith('//')) {
+                absoluteUrl = 'https:' + link;
+              } else if (link.startsWith('/')) {
+                const baseUrl = new URL(content.url);
+                absoluteUrl = baseUrl.origin + link;
+              } else {
+                // Invalid or malformed URL
+                console.warn(`⚠️ Skipping invalid URL: ${link}`);
+                return;
+              }
+
+              // Validate the final URL
+              new URL(absoluteUrl);
+
+              items.push({
+                title,
+                url: absoluteUrl,
+                source: new URL(content.url).hostname,
+                snippet: description || title,
+                publishedDate: new Date()
+              });
+            } catch (error) {
+              console.warn(`⚠️ Invalid URL detected: ${link} - ${error.message}`);
+            }
           }
         }
       });

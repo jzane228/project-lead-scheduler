@@ -221,13 +221,33 @@ class EnhancedScrapingService {
         const link = $elem.find('a').attr('href');
         
         if (title && link) {
-          articles.push({
-            title,
-            url: link,
-            source: 'Bing News',
-            snippet: title,
-            publishedDate: new Date()
-          });
+          let absoluteUrl;
+
+          try {
+            if (link.startsWith('http')) {
+              absoluteUrl = link;
+            } else if (link.startsWith('//')) {
+              absoluteUrl = 'https:' + link;
+            } else if (link.startsWith('/')) {
+              absoluteUrl = 'https://www.bing.com' + link;
+            } else {
+              // Skip invalid URLs
+              return;
+            }
+
+            // Validate URL
+            new URL(absoluteUrl);
+
+            articles.push({
+              title,
+              url: absoluteUrl,
+              source: 'Bing News',
+              snippet: title,
+              publishedDate: new Date()
+            });
+          } catch (error) {
+            console.warn(`⚠️ Skipping invalid Bing News URL: ${link}`);
+          }
         }
       });
       

@@ -34,7 +34,7 @@ const AnalyticsDashboard = () => {
   const { data: leadMetrics, isLoading: leadsLoading } = useQuery(
     ['leadMetrics', timeRange],
     async () => {
-      const response = await axios.get(`/api/analytics/leads?timeRange=${timeRange}`);
+      const response = await axios.get(`/api/analytics/leads-auth?timeRange=${timeRange}`);
       return response.data;
     },
     { refetchInterval: 300000 } // Refresh every 5 minutes

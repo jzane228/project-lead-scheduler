@@ -19,7 +19,7 @@ const Dashboard = () => {
   });
 
   const { data: recentLeads, isLoading: leadsLoading } = useQuery('recentLeads', async () => {
-    const response = await axios.get('/api/leads?limit=5');
+    const response = await axios.get('/api/leads-auth?limit=5');
     return response.data;
   });
 
