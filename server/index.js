@@ -182,10 +182,6 @@ const startServer = async () => {
     console.log('Seeding industries data...');
     await seedIndustries();
 
-    // Seed sample leads data
-    console.log('Seeding sample leads data...');
-    await seedSampleLeads();
-
     // Initialize scheduler (with error handling)
     console.log('Initializing scheduler...');
     try {
