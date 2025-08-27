@@ -69,6 +69,16 @@ app.get('/api/health', (req, res) => {
   });
 });
 
+// Test endpoint (no database required)
+app.get('/api/test', (req, res) => {
+  res.json({
+    message: 'Server is working!',
+    timestamp: new Date().toISOString(),
+    environment: process.env.NODE_ENV || 'development',
+    uptime: process.uptime()
+  });
+});
+
 // API routes
 app.use('/api/auth', authRoutes);
 app.use('/api/users', userRoutes);
@@ -112,14 +122,24 @@ const startServer = async () => {
     await sequelize.authenticate();
     console.log('Database connection established successfully.');
 
-    // Sync database models
-    console.log('Syncing database models...');
-    await sequelize.sync({ alter: true });
-    console.log('Database models synchronized.');
+    // Sync database models (only in development, not in production)
+    if (process.env.NODE_ENV !== 'production') {
+      console.log('Syncing database models...');
+      await sequelize.sync({ alter: true });
+      console.log('Database models synchronized.');
+    } else {
+      console.log('Production environment: skipping database sync');
+    }
 
-    // Initialize scheduler
+    // Initialize scheduler (with error handling)
     console.log('Initializing scheduler...');
-    await schedulerService.initialize();
+    try {
+      await schedulerService.initialize();
+      console.log('Scheduler initialized successfully');
+    } catch (error) {
+      console.error('Scheduler initialization failed:', error.message);
+      console.log('Continuing without scheduler...');
+    }
 
     // Start server
     const server = app.listen(PORT, () => {

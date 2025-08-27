@@ -15,15 +15,16 @@ class SchedulerService {
     try {
       // Initialize scraping service
       await this.scrapingService.initialize();
-      
+
       // Load active configurations and schedule them
       await this.loadActiveConfigurations();
-      
+
       this.isInitialized = true;
       console.log('Scheduler service initialized');
     } catch (error) {
-      console.error('Failed to initialize scheduler service:', error);
-      throw error;
+      console.error('Failed to initialize scheduler service:', error.message);
+      // Don't throw error, just log it and continue without scheduler
+      console.log('Scheduler will not be available due to database issues');
     }
   }
 
@@ -44,10 +45,15 @@ class SchedulerService {
 
       // Schedule each active configuration
       for (const config of activeConfigs) {
-        await this.scheduleConfiguration(config);
+        try {
+          await this.scheduleConfiguration(config);
+        } catch (configError) {
+          console.error(`Error scheduling config ${config.id}:`, configError.message);
+        }
       }
     } catch (error) {
-      console.error('Error loading active configurations:', error);
+      console.error('Error loading active configurations:', error.message);
+      console.log('Scheduler will continue without loading configurations');
     }
   }
 
