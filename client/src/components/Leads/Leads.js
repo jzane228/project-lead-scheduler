@@ -49,12 +49,17 @@ const Leads = () => {
         sortOrder,
         ...filters
       });
-      
+
+      console.log('Fetching leads with params:', params.toString());
       const response = await axios.get(`/api/leads-auth?${params}`);
+      console.log('Leads API response:', response.data);
       return response.data;
     },
     {
-      keepPreviousData: true
+      keepPreviousData: true,
+      onError: (error) => {
+        console.error('Leads fetch error:', error);
+      }
     }
   );
 
@@ -531,7 +536,73 @@ const Leads = () => {
             <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600 mx-auto"></div>
             <p className="mt-2 text-gray-600">Loading leads...</p>
           </div>
+        ) : error ? (
+          <div className="px-4 py-8 text-center">
+            <div className="bg-red-50 border border-red-200 rounded-md p-4">
+              <div className="flex">
+                <div className="ml-3">
+                  <h3 className="text-sm font-medium text-red-800">
+                    Error Loading Leads
+                  </h3>
+                  <div className="mt-2 text-sm text-red-700">
+                    <p>{error?.response?.data?.error || error?.message || 'Failed to load leads'}</p>
+                    {error?.response?.status === 401 && (
+                      <p className="mt-2">
+                        <strong>Solution:</strong> Please log out and log back in to refresh your authentication token.
+                      </p>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
         ) : (
+          <>
+            {/* Debug Panel - Remove this in production */}
+            <div className="mb-4 p-4 bg-yellow-50 border border-yellow-200 rounded-md">
+              <h3 className="text-sm font-medium text-yellow-800 mb-2">🔍 Debug Info (Development Only)</h3>
+              <div className="text-xs text-yellow-700 space-y-1">
+                <p><strong>Loading:</strong> {isLoading ? 'Yes' : 'No'}</p>
+                <p><strong>Error:</strong> {error ? error.message : 'None'}</p>
+                <p><strong>Leads Count:</strong> {leadsData?.leads?.length || 0}</p>
+                <p><strong>Data Structure:</strong> {leadsData ? 'Valid' : 'Null'}</p>
+                <p><strong>Auth Token:</strong> {localStorage.getItem('token') ? 'Present' : 'Missing'}</p>
+                <div className="mt-2">
+                  <button
+                    onClick={async () => {
+                      try {
+                        console.log('Manual test: Fetching leads...');
+                        const response = await axios.get('/api/leads-auth');
+                        console.log('Manual test response:', response.data);
+                        alert('Success! Check console for response data.');
+                      } catch (err) {
+                        console.error('Manual test error:', err);
+                        alert(`Error: ${err.response?.data?.error || err.message}`);
+                      }
+                    }}
+                    className="px-3 py-1 bg-yellow-600 text-white text-xs rounded hover:bg-yellow-700"
+                  >
+                    Test API Call
+                  </button>
+                </div>
+                {leadsData && (
+                  <details>
+                    <summary className="cursor-pointer">Raw API Response</summary>
+                    <pre className="mt-2 p-2 bg-white rounded text-xs overflow-auto">
+                      {JSON.stringify(leadsData, null, 2)}
+                    </pre>
+                  </details>
+                )}
+              </div>
+            </div>
+
+            {leadsData?.leads?.length === 0 ? (
+              <div className="px-4 py-8 text-center">
+                <div className="bg-gray-50 border border-gray-200 rounded-md p-8">
+                  <p className="text-gray-600">No leads found. Start by running a scraping job!</p>
+                </div>
+              </div>
+            ) : (
           <>
             <table className="min-w-full divide-y divide-gray-200">
               <thead className="bg-gray-50">
