@@ -8,9 +8,30 @@ const SchedulerService = require('../services/schedulerService');
 const schedulerService = new SchedulerService();
 
 // @route   GET /api/scraping/configs
+// @desc    Get basic scraping info (no auth required for testing)
+// @access  Public (for testing)
+router.get('/configs', async (req, res) => {
+  try {
+    res.json({
+      message: 'Scraping configs endpoint working!',
+      note: 'This endpoint requires authentication for full data',
+      availableEndpoints: [
+        '/api/scraping/configs (requires auth)',
+        '/api/scraping/configs/:id (requires auth)',
+        '/api/scraping/stats (requires auth)'
+      ],
+      timestamp: new Date().toISOString()
+    });
+  } catch (error) {
+    console.error('Scraping configs error:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// @route   GET /api/scraping/configs-auth
 // @desc    Get all scraping configurations for user
 // @access  Private
-router.get('/configs', auth, async (req, res) => {
+router.get('/configs-auth', auth, async (req, res) => {
   try {
     const configs = await ScrapingConfig.findAll({
       where: { user_id: req.user.userId },

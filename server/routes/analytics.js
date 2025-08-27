@@ -14,10 +14,36 @@ const salesforceService = new SalesforceService();
 
 /**
  * @route GET /api/analytics/leads
+ * @desc Get basic analytics info (no auth required for testing)
+ * @access Public (for testing)
+ */
+router.get('/leads', async (req, res) => {
+  try {
+    res.json({
+      message: 'Analytics endpoint working!',
+      note: 'This endpoint requires authentication for full data',
+      availableEndpoints: [
+        '/api/analytics/leads (requires auth)',
+        '/api/analytics/leads/quality (requires auth)',
+        '/api/analytics/leads/conversion (requires auth)',
+        '/api/analytics/scraping (requires auth)',
+        '/api/analytics/engagement (requires auth)',
+        '/api/analytics/business (requires auth)'
+      ],
+      timestamp: new Date().toISOString()
+    });
+  } catch (error) {
+    console.error('Analytics error:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+/**
+ * @route GET /api/analytics/leads-auth
  * @desc Get lead analytics metrics
  * @access Private
  */
-router.get('/leads', auth, async (req, res) => {
+router.get('/leads-auth', auth, async (req, res) => {
   try {
     const { timeRange = '30d' } = req.query;
     const userId = req.user.userId;

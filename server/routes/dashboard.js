@@ -11,6 +11,29 @@ const analyticsService = new AnalyticsService();
 const hubspotService = new HubSpotService();
 const salesforceService = new SalesforceService();
 
+// @route   GET /api/dashboard
+// @desc    Get basic dashboard overview (no auth required for testing)
+// @access  Public (for testing)
+router.get('/', async (req, res) => {
+  try {
+    res.json({
+      message: 'Dashboard endpoint working!',
+      availableEndpoints: [
+        '/api/dashboard/stats',
+        '/api/dashboard/overview',
+        '/api/dashboard/recent-activity',
+        '/api/dashboard/quick-actions',
+        '/api/dashboard/alerts'
+      ],
+      note: 'Other endpoints require authentication',
+      timestamp: new Date().toISOString()
+    });
+  } catch (error) {
+    console.error('Dashboard error:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
 // @route   GET /api/dashboard/stats
 // @desc    Get comprehensive dashboard statistics
 // @access  Private

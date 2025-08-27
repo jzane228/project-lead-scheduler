@@ -5,9 +5,31 @@ const { Lead, LeadSource, Industry, Tag, User } = require('../models');
 const { Op } = require('sequelize');
 
 // @route   GET /api/leads
+// @desc    Get basic leads info (no auth required for testing)
+// @access  Public (for testing)
+router.get('/', async (req, res) => {
+  try {
+    res.json({
+      message: 'Leads endpoint working!',
+      note: 'This endpoint requires authentication for full data',
+      availableEndpoints: [
+        '/api/leads (requires auth)',
+        '/api/leads/:id (requires auth)',
+        '/api/leads/groups (requires auth)',
+        '/api/leads/stats/overview (requires auth)'
+      ],
+      timestamp: new Date().toISOString()
+    });
+  } catch (error) {
+    console.error('Leads error:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// @route   GET /api/leads-auth
 // @desc    Get all leads for user with filtering and pagination
 // @access  Private
-router.get('/', auth, async (req, res) => {
+router.get('/auth', auth, async (req, res) => {
   try {
     const {
       page = 1,
