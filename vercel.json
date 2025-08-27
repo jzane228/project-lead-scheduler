@@ -4,6 +4,12 @@
   "installCommand": "cd client && npm install",
   "framework": "create-react-app",
   "rootDirectory": "client",
+  "regions": ["iad1"],
+  "functions": {
+    "client/**/*.js": {
+      "maxDuration": 30
+    }
+  },
   "rewrites": [
     {
       "source": "/(.*)",
