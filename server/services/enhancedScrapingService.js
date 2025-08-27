@@ -1028,54 +1028,130 @@ class EnhancedScrapingService {
 
   async saveLeads(processedResults, userId, config) {
     const savedLeads = [];
-    
+
     for (let i = 0; i < processedResults.length; i++) {
       const result = processedResults[i];
       try {
-        console.log(`💾 Saving lead for: ${result.title}...`);
-        
+        console.log(`💾 Saving comprehensive lead for: ${result.title}...`);
+
         // Create or find lead source
         const leadSource = await LeadSource.create({
           name: result.source || 'Unknown Source',
           url: this.ensureValidUrl(result.url),
           type: this.getLeadSourceType(result.source, result.url)
         });
-        
-        // Create lead with extracted data
+
+        // Build comprehensive custom fields from extracted data
+        const customFields = {};
+        if (result.extractedData.roomCount) customFields.roomCount = result.extractedData.roomCount;
+        if (result.extractedData.squareFootage) customFields.squareFootage = result.extractedData.squareFootage;
+        if (result.extractedData.employees) customFields.employees = result.extractedData.employees;
+        if (result.extractedData.budget) customFields.budget = result.extractedData.budget;
+
+        // Build contact info object
+        const contactInfo = {};
+        if (result.extractedData.contactInfo?.name) contactInfo.name = result.extractedData.contactInfo.name;
+        if (result.extractedData.contactInfo?.email) contactInfo.email = result.extractedData.contactInfo.email;
+        if (result.extractedData.contactInfo?.phone) contactInfo.phone = result.extractedData.contactInfo.phone;
+        if (result.extractedData.contactInfo?.company) contactInfo.company = result.extractedData.contactInfo.company;
+
+        // Build keywords array combining scraping keywords and extracted keywords
+        const keywords = [
+          ...(config.keywords || []),
+          ...(result.extractedData.keywords || [])
+        ].filter((keyword, index, arr) => arr.indexOf(keyword) === index); // Remove duplicates
+
+        // Calculate confidence score
+        const confidence = result.extractedData.confidence ||
+                          this.calculateConfidence(result.extractedData) ||
+                          (result.extractedData.aiUsed ? 0.8 : 0.6);
+
+        // Create lead with comprehensive extracted data
         const lead = await Lead.create({
+          // Basic Information
           title: result.title,
-          description: result.extractedData.description || result.snippet,
+          description: result.extractedData.description || result.articleText || result.snippet || result.title,
+
+          // Project Details
+          project_type: result.extractedData.projectType || null,
+          location: result.extractedData.location || null,
+          budget: result.extractedData.budget || null,
+          timeline: result.extractedData.timeline || null,
+
+          // Company & Contact Information
           company: result.extractedData.company || 'Unknown',
-          contactName: result.extractedData.contactInfo?.name || 'Unknown',
-          contactEmail: result.extractedData.contactInfo?.email || 'Unknown',
-          contactPhone: result.extractedData.contactInfo?.phone || 'Unknown',
-          budget: result.extractedData.budget,
+          contact_info: Object.keys(contactInfo).length > 0 ? contactInfo : null,
+
+          // Industry & Keywords
+          industry_type: result.extractedData.industryType || null,
+          keywords: keywords.length > 0 ? keywords : [],
+
+          // Article URL - CRITICAL for user's requirement
+          url: result.url, // Article URL for easy access
+
+          // Dates
+          published_at: result.publishedDate || result.extractedAt || new Date(),
+
+          // Status & Priority
+          status: this.mapStatusToValidEnum(result.extractedData.status || 'new'),
+          priority: this.mapPriorityToValidEnum(result.extractedData.priority || 'medium'),
+
+          // Custom Fields & Metadata
+          custom_fields: Object.keys(customFields).length > 0 ? customFields : {},
+          confidence: confidence,
+          extraction_method: result.extractedData.aiUsed ? 'ai' : 'manual',
+
+          // Notes & Tracking
+          notes: result.extractedData.notes ||
+                `Scraped from ${result.source} using keywords: ${config.keywords?.join(', ') || 'N/A'}`,
+
+          // Foreign Keys
+          user_id: userId,
+          lead_source_id: leadSource.id,
+
+          // Legacy fields for backward compatibility
+          contactName: result.extractedData.contactInfo?.name || null,
+          contactEmail: result.extractedData.contactInfo?.email || null,
+          contactPhone: result.extractedData.contactInfo?.phone || null,
           budgetRange: result.extractedData.budgetRange || 'not_specified',
-          timeline: result.extractedData.timeline,
-          requirements: result.extractedData.description,
-          sourceUrl: result.url, // This should be the article URL
+          requirements: result.extractedData.description || null,
+          sourceUrl: result.url, // Legacy field
           sourceTitle: result.title,
           publishedDate: result.publishedDate,
           scrapedDate: new Date(),
-          extractedData: result.extractedData,
-          user_id: userId,
-          lead_source_id: leadSource.id,
-          status: this.mapStatusToValidEnum(result.extractedData.status),
-          priority: this.mapPriorityToValidEnum(result.extractedData.priority),
-          industry_type: result.extractedData.industryType || 'mixed_use'
+          extractedData: result.extractedData
         });
-        
+
+        // Add tags based on keywords and extracted data
+        if (keywords.length > 0) {
+          const { Tag } = require('../models');
+          for (const keyword of keywords.slice(0, 5)) { // Limit to 5 tags
+            try {
+              const tag = await Tag.findOrCreateByName(keyword.toLowerCase());
+              await lead.addTag(tag.name);
+            } catch (error) {
+              console.log(`⚠️ Could not add tag "${keyword}": ${error.message}`);
+            }
+          }
+        }
+
         savedLeads.push(lead);
-        
+        console.log(`✅ Saved comprehensive lead with ${Object.keys(result.extractedData).length} fields`);
+
         // Update progress for saving
         const jobId = `${config.id}-${Date.now()}`;
         this.updateProgress(jobId, 'saving', i + 1, processedResults.length, `Saved ${i + 1} of ${processedResults.length} leads...`);
-        
+
       } catch (error) {
-        console.error(`❌ Error saving lead:`, error);
+        console.error(`❌ Error saving comprehensive lead:`, error);
+        console.error('Lead data that failed:', {
+          title: result.title,
+          url: result.url,
+          extractedData: result.extractedData
+        });
       }
     }
-    
+
     return savedLeads;
   }
 

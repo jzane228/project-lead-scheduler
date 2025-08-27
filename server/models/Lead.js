@@ -192,36 +192,102 @@ module.exports = (sequelize) => {
   // Instance methods
   Lead.prototype.updateScore = function() {
     let score = 0;
-    
-    // Base score from priority
+    let maxScore = 100;
+
+    // Base score from priority (10-25 points)
     switch (this.priority) {
       case 'urgent': score += 25; break;
       case 'high': score += 20; break;
       case 'medium': score += 15; break;
       case 'low': score += 10; break;
     }
-    
-    // Score from qualification
+
+    // Score from qualification (5-30 points)
     switch (this.qualification) {
       case 'highly_qualified': score += 30; break;
       case 'qualified': score += 20; break;
       case 'unqualified': score += 5; break;
     }
-    
-    // Score from confidence
+
+    // AI/Data extraction confidence (0-20 points)
     if (this.confidence) {
-      score += Math.round(this.confidence * 20);
+      score += Math.round((this.confidence / 100) * 20);
     }
-    
-    // Score from custom fields (if they exist)
+
+    // Company information completeness (0-10 points)
+    if (this.company && this.company !== 'Unknown') {
+      score += 10;
+    }
+
+    // Location information (0-8 points)
+    if (this.location && this.location !== 'Unknown') {
+      score += 8;
+    }
+
+    // Project details completeness (0-15 points)
+    let projectScore = 0;
+    if (this.project_type) projectScore += 4;
+    if (this.budget && this.budget !== 'Unknown') projectScore += 4;
+    if (this.timeline && this.timeline !== 'Unknown') projectScore += 4;
+    if (this.industry_type && this.industry_type !== 'mixed_use') projectScore += 3;
+    score += projectScore;
+
+    // Contact information quality (0-15 points)
+    let contactScore = 0;
+    if (this.contact_info) {
+      if (this.contact_info.name && this.contact_info.name !== 'Unknown') contactScore += 4;
+      if (this.contact_info.email && this.contact_info.email !== 'Unknown') contactScore += 4;
+      if (this.contact_info.phone && this.contact_info.phone !== 'Unknown') contactScore += 4;
+      if (this.contact_info.title && this.contact_info.title !== 'Unknown') contactScore += 3;
+    }
+    score += contactScore;
+
+    // Keywords and tags (0-10 points)
+    if (this.keywords && this.keywords.length > 0) {
+      score += Math.min(10, this.keywords.length * 2);
+    }
+
+    // Custom fields completeness (0-10 points)
     if (this.custom_fields) {
-      // Add points for having specific fields
-      if (this.custom_fields.roomCount) score += 5;
-      if (this.custom_fields.squareFootage) score += 5;
-      if (this.custom_fields.employees) score += 5;
-      if (this.custom_fields.budget) score += 5;
+      const customFieldCount = Object.keys(this.custom_fields).length;
+      score += Math.min(10, customFieldCount * 2);
     }
-    
+
+    // Article URL presence (0-5 points)
+    if (this.url && this.url !== 'https://example.com') {
+      score += 5;
+    }
+
+    // Published date recency (0-5 points)
+    if (this.published_at) {
+      const daysSincePublished = Math.floor((Date.now() - new Date(this.published_at)) / (1000 * 60 * 60 * 24));
+      if (daysSincePublished <= 7) score += 5;      // Very recent (last week)
+      else if (daysSincePublished <= 30) score += 3; // Recent (last month)
+      else if (daysSincePublished <= 90) score += 1; // Somewhat recent (last 3 months)
+    }
+
+    // Industry specificity bonus (0-5 points)
+    if (this.industry_type && this.industry_type !== 'mixed_use') {
+      score += 5;
+    }
+
+    // Data completeness bonus (0-10 points)
+    const dataFields = [
+      this.company, this.location, this.project_type, this.budget,
+      this.contact_info?.email, this.contact_info?.phone, this.industry_type
+    ];
+    const knownFields = dataFields.filter(field =>
+      field && field !== 'Unknown' && field !== 'mixed_use'
+    ).length;
+    const completenessBonus = Math.round((knownFields / dataFields.length) * 10);
+    score += completenessBonus;
+
+    // Extraction method bonus (AI is generally better)
+    if (this.extraction_method === 'ai') {
+      score += 3;
+    }
+
+    // Cap the score at 100
     this.score = Math.min(100, score);
     return this.score;
   };

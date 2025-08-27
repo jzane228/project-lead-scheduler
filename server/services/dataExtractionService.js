@@ -274,29 +274,95 @@ class DataExtractionService {
   }
 
   extractContactInfoFromText(text) {
-    if (!text) return { email: "Unknown", phone: "Unknown" };
-    
-    // Extract email
-    const emailMatch = text.match(/\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b/);
-    const email = emailMatch ? emailMatch[0] : "Unknown";
-    
-    // Extract phone numbers (various formats)
-    const phonePatterns = [
-      /(\+\d{1,3}[-.\s]?)?\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4}/,
-      /(\d{3})[-.\s]?(\d{3})[-.\s]?(\d{4})/,
-      /(\d{3})[-.\s]?(\d{4})[-.\s]?(\d{4})/
+    if (!text) return { name: "Unknown", email: "Unknown", phone: "Unknown", title: "Unknown", company: "Unknown" };
+
+    const contact = {
+      name: "Unknown",
+      email: "Unknown",
+      phone: "Unknown",
+      title: "Unknown",
+      company: "Unknown"
+    };
+
+    // Extract email with better patterns
+    const emailPatterns = [
+      /\b([A-Za-z0-9._%+-]+)@([A-Za-z0-9.-]+\.[A-Z|a-z]{2,})\b/g,
+      /\bcontact[ed]?\s*:?\s*([A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,})\b/i,
+      /\bemail[ed]?\s*:?\s*([A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,})\b/i
     ];
-    
-    let phone = "Unknown";
-    for (const pattern of phonePatterns) {
-      const phoneMatch = text.match(pattern);
-      if (phoneMatch) {
-        phone = phoneMatch[0];
+
+    for (const pattern of emailPatterns) {
+      const match = text.match(pattern);
+      if (match) {
+        contact.email = Array.isArray(match) ? match[0] : match;
         break;
       }
     }
-    
-    return { email, phone };
+
+    // Extract phone numbers with enhanced patterns
+    const phonePatterns = [
+      /(\+\d{1,3}[-.\s]?)?\(?(\d{3})\)?[-.\s]?(\d{3})[-.\s]?(\d{4})(?:\s*(?:ext|extension|x)\s*(\d+))?/,
+      /(\d{3})[-.\s]?(\d{3})[-.\s]?(\d{4})(?:\s*(?:ext|extension|x)\s*(\d+))?/,
+      /(\d{3})[-.\s]?(\d{4})[-.\s]?(\d{4})/,
+      /1?[-.\s]?(\d{3})[-.\s]?(\d{3})[-.\s]?(\d{4})/,
+      /(?:phone|tel|mobile|cell)\s*:?\s*([\d\s\-\.\(\)\+ext]+)/i
+    ];
+
+    for (const pattern of phonePatterns) {
+      const phoneMatch = text.match(pattern);
+      if (phoneMatch) {
+        contact.phone = phoneMatch[0].replace(/\s+/g, '-').replace(/--+/g, '-');
+        break;
+      }
+    }
+
+    // Extract names and titles with enhanced patterns
+    const nameTitlePatterns = [
+      // "Name, Title, Company"
+      /([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*),\s*([^,]+?),\s*([^,\n]+)/i,
+      // "Title Name of Company"
+      /(?:Mr\.?|Mrs\.?|Ms\.?|Dr\.?)?\s*([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*),\s*(?:of|at)\s+([^,\n]+)/i,
+      // "Company Contact: Name"
+      /(?:contact|representative|spokesperson)\s*:?\s*([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*)/i,
+      // "Name (Title)"
+      /([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*)\s*\(([^)]+)\)/i,
+      // "Title: Name"
+      /(?:CEO|CTO|CFO|COO|President|Director|Manager|VP|Vice President|Chief|Executive|Founder)\s*:?\s*([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*)/i
+    ];
+
+    for (const pattern of nameTitlePatterns) {
+      const match = text.match(pattern);
+      if (match) {
+        if (match[2] && match[2].length > 3) {
+          // Pattern with title
+          contact.name = match[1].trim();
+          contact.title = match[2].trim();
+        } else {
+          // Simple name extraction
+          contact.name = match[1].trim();
+        }
+        break;
+      }
+    }
+
+    // If no specific contact found, try to extract from context
+    if (contact.name === "Unknown") {
+      const contextPatterns = [
+        /(?:spoke|said|told|explained|commented)\s+(?:by|with)\s+([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*)/i,
+        /(?:according to|per|via)\s+([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*)/i
+      ];
+
+      for (const pattern of contextPatterns) {
+        const match = text.match(pattern);
+        if (match && match[1].length > 3) {
+          contact.name = match[1].trim();
+          contact.title = "Representative";
+          break;
+        }
+      }
+    }
+
+    return contact;
   }
 
   extractDescriptionFromText(text) {
@@ -338,7 +404,7 @@ class DataExtractionService {
   }
 
   extractAllData(text) {
-    return {
+    const data = {
       company: this.extractCompanyFromText(text),
       location: this.extractLocationFromText(text),
       projectType: this.extractProjectTypeFromText(text),
@@ -349,8 +415,220 @@ class DataExtractionService {
       squareFootage: this.extractSquareFootageFromText(text),
       employees: this.extractEmployeesFromText(text),
       contactInfo: this.extractContactInfoFromText(text),
-      description: this.extractDescriptionFromText(text)
+      description: this.extractDescriptionFromText(text),
+      // Enhanced fields
+      industryType: this.extractIndustryTypeFromText(text),
+      keywords: this.extractKeywordsFromText(text),
+      confidence: this.calculateDataConfidence(text)
     };
+
+    // Cross-validate and enhance data
+    return this.crossValidateAndEnhance(data, text);
+  }
+
+  extractIndustryTypeFromText(text) {
+    if (!text) return "mixed_use";
+
+    const lowerText = text.toLowerCase();
+
+    // Healthcare & Medical
+    if (lowerText.includes('hospital') || lowerText.includes('clinic') || lowerText.includes('medical center') ||
+        lowerText.includes('healthcare') || lowerText.includes('pharmaceutical')) {
+      return 'healthcare';
+    }
+
+    // Education
+    if (lowerText.includes('school') || lowerText.includes('university') || lowerText.includes('college') ||
+        lowerText.includes('academy') || lowerText.includes('educational') || lowerText.includes('campus')) {
+      return 'education';
+    }
+
+    // Hospitality & Tourism
+    if (lowerText.includes('hotel') || lowerText.includes('resort') || lowerText.includes('hospitality') ||
+        lowerText.includes('tourism') || lowerText.includes('casino') || lowerText.includes('entertainment')) {
+      return 'hospitality';
+    }
+
+    // Residential
+    if (lowerText.includes('apartment') || lowerText.includes('condominium') || lowerText.includes('residential') ||
+        lowerText.includes('housing') || lowerText.includes('community') || lowerText.includes('neighborhood')) {
+      return 'residential';
+    }
+
+    // Commercial & Office
+    if (lowerText.includes('office') || lowerText.includes('commercial') || lowerText.includes('business center') ||
+        lowerText.includes('corporate') || lowerText.includes('headquarters')) {
+      return 'commercial';
+    }
+
+    // Retail & Shopping
+    if (lowerText.includes('retail') || lowerText.includes('shopping center') || lowerText.includes('mall') ||
+        lowerText.includes('store') || lowerText.includes('boutique') || lowerText.includes('marketplace')) {
+      return 'retail';
+    }
+
+    // Industrial & Manufacturing
+    if (lowerText.includes('industrial') || lowerText.includes('manufacturing') || lowerText.includes('warehouse') ||
+        lowerText.includes('distribution') || lowerText.includes('logistics') || lowerText.includes('factory')) {
+      return 'industrial';
+    }
+
+    // Infrastructure
+    if (lowerText.includes('infrastructure') || lowerText.includes('transportation') || lowerText.includes('bridge') ||
+        lowerText.includes('highway') || lowerText.includes('rail') || lowerText.includes('airport') ||
+        lowerText.includes('seaport') || lowerText.includes('utility')) {
+      return 'infrastructure';
+    }
+
+    // Mixed-Use or default
+    return 'mixed_use';
+  }
+
+  extractKeywordsFromText(text) {
+    if (!text) return [];
+
+    const keywords = [];
+    const lowerText = text.toLowerCase();
+
+    // Business and project keywords
+    const businessKeywords = [
+      'development', 'construction', 'project', 'expansion', 'renovation', 'upgrade',
+      'investment', 'funding', 'announcement', 'launch', 'opening', 'completion',
+      'acquisition', 'partnership', 'collaboration', 'joint venture', 'merger'
+    ];
+
+    // Industry-specific keywords
+    const industryKeywords = [
+      'hotel', 'resort', 'apartment', 'office', 'retail', 'commercial', 'residential',
+      'industrial', 'healthcare', 'education', 'hospitality', 'infrastructure',
+      'restaurant', 'entertainment', 'mixed-use', 'condominium', 'warehouse'
+    ];
+
+    // Location keywords (cities, states, regions)
+    const locationKeywords = [
+      'downtown', 'uptown', 'midtown', 'coast', 'bay area', 'suburb', 'urban',
+      'rural', 'metropolitan', 'business district', 'financial district'
+    ];
+
+    // Add matching keywords
+    [...businessKeywords, ...industryKeywords, ...locationKeywords].forEach(keyword => {
+      if (lowerText.includes(keyword) && !keywords.includes(keyword)) {
+        keywords.push(keyword);
+      }
+    });
+
+    // Extract proper nouns (potential company names, locations)
+    const properNouns = text.match(/\b[A-Z][a-z]{2,}\b/g) || [];
+    properNouns.forEach(noun => {
+      if (noun.length > 3 && !keywords.includes(noun.toLowerCase())) {
+        keywords.push(noun.toLowerCase());
+      }
+    });
+
+    return keywords.slice(0, 10); // Limit to top 10 keywords
+  }
+
+  calculateDataConfidence(text) {
+    if (!text) return 0;
+
+    let confidence = 0;
+    let maxConfidence = 0;
+
+    // Company confidence
+    if (this.extractCompanyFromText(text) !== 'Unknown') {
+      confidence += 20;
+    }
+    maxConfidence += 20;
+
+    // Location confidence
+    if (this.extractLocationFromText(text) !== 'Unknown') {
+      confidence += 15;
+    }
+    maxConfidence += 15;
+
+    // Budget confidence
+    if (this.extractBudgetFromText(text) !== 'Unknown') {
+      confidence += 20;
+    }
+    maxConfidence += 20;
+
+    // Contact info confidence
+    const contactInfo = this.extractContactInfoFromText(text);
+    if (contactInfo.email !== 'Unknown' || contactInfo.phone !== 'Unknown') {
+      confidence += 15;
+    }
+    maxConfidence += 15;
+
+    // Project details confidence
+    const details = [
+      this.extractProjectTypeFromText(text),
+      this.extractTimelineFromText(text),
+      this.extractRoomCountFromText(text),
+      this.extractSquareFootageFromText(text)
+    ];
+    const knownDetails = details.filter(detail => detail !== 'Unknown').length;
+    confidence += (knownDetails / details.length) * 20;
+    maxConfidence += 20;
+
+    // Text quality confidence
+    if (text.length > 500) confidence += 10;
+    else if (text.length > 200) confidence += 5;
+    maxConfidence += 10;
+
+    return maxConfidence > 0 ? Math.round((confidence / maxConfidence) * 100) : 0;
+  }
+
+  crossValidateAndEnhance(data, text) {
+    const lowerText = text.toLowerCase();
+
+    // If we have a company and project type, enhance the description
+    if (data.company !== 'Unknown' && data.projectType !== 'Unknown') {
+      data.description = `${data.company} is developing a ${data.projectType.toLowerCase()} project${data.location !== 'Unknown' ? ` in ${data.location}` : ''}. ${data.description}`;
+    }
+
+    // Validate budget against project type
+    if (data.budget !== 'Unknown' && data.projectType !== 'Unknown') {
+      const budgetAmount = parseFloat(data.budget);
+      const projectType = data.projectType.toLowerCase();
+
+      // Basic budget validation by project type
+      const budgetRanges = {
+        'hotel': [5000000, 50000000],
+        'resort': [10000000, 100000000],
+        'apartment': [1000000, 20000000],
+        'office': [2000000, 30000000],
+        'retail': [1000000, 15000000]
+      };
+
+      const range = budgetRanges[projectType];
+      if (range && (budgetAmount < range[0] || budgetAmount > range[1])) {
+        console.log(`⚠️ Budget ${budgetAmount} seems unusual for ${projectType} project`);
+      }
+    }
+
+    // Enhance contact info with company context
+    if (data.contactInfo.company === 'Unknown' && data.company !== 'Unknown') {
+      data.contactInfo.company = data.company;
+    }
+
+    // Add contextual keywords
+    if (data.keywords.length === 0) {
+      const contextualKeywords = [];
+
+      if (lowerText.includes('green') || lowerText.includes('sustainable')) {
+        contextualKeywords.push('sustainable');
+      }
+      if (lowerText.includes('luxury') || lowerText.includes('premium')) {
+        contextualKeywords.push('luxury');
+      }
+      if (lowerText.includes('smart') || lowerText.includes('technology')) {
+        contextualKeywords.push('technology');
+      }
+
+      data.keywords = contextualKeywords;
+    }
+
+    return data;
   }
 
   // Advanced extraction using context clues
