@@ -1,6 +1,5 @@
 const ScrapyService = require('./scrapyService');
 const DataExtractionService = require('./dataExtractionService');
-const OpenAI = require('openai');
 const axios = require('axios');
 const { Lead, LeadSource } = require('../models');
 
@@ -8,25 +7,15 @@ class EnhancedScrapingService {
   constructor() {
     this.scrapyService = new ScrapyService();
     this.dataExtractionService = new DataExtractionService();
-    this.openai = null;
     this.deepseekApiKey = process.env.DEEPSEEK_API_KEY;
-    this.useDeepseek = process.env.USE_DEEPSEEK === 'true' || !process.env.OPENAI_API_KEY;
     this.progressCallbacks = new Map();
 
-    // Initialize AI service (OpenAI or Deepseek)
-    if (this.useDeepseek && this.deepseekApiKey) {
-      console.log('✅ Using Deepseek for enhanced extraction (cheaper option)');
-    } else if (process.env.OPENAI_API_KEY) {
-      try {
-        this.openai = new OpenAI({
-          apiKey: process.env.OPENAI_API_KEY
-        });
-        console.log('✅ OpenAI client initialized for enhanced extraction');
-      } catch (error) {
-        console.warn('⚠️ OpenAI initialization failed:', error.message);
-      }
+    // Deepseek only - no OpenAI fallback
+    if (this.deepseekApiKey) {
+      console.log('✅ Deepseek initialized for enhanced extraction');
     } else {
-      console.log('⚠️ No AI API key found, using pattern-based extraction only');
+      console.log('⚠️ DEEPSEEK_API_KEY not found - set it in environment variables');
+      console.log('   Get your key from: https://platform.deepseek.com/');
     }
   }
 
@@ -498,8 +487,8 @@ class EnhancedScrapingService {
       try {
         let extractedData = {};
         
-        if (this.openai && config.useAI !== false) {
-          // Use AI extraction if available
+        if (this.deepseekApiKey && config.useAI !== false) {
+          // Use Deepseek AI extraction if available
           extractedData = await this.extractWithAI(result.fullContent, config.data_extraction_rules || {});
         } else {
           // Use pattern-based extraction with improved content
@@ -538,48 +527,21 @@ class EnhancedScrapingService {
 
   async extractWithAI(text, extractionRules) {
     try {
-      const prompt = this.buildAIExtractionPrompt(text, extractionRules);
-
-      if (this.useDeepseek && this.deepseekApiKey) {
-        return await this.extractWithDeepseek(prompt);
-      } else if (this.openai) {
-        return await this.extractWithOpenAI(prompt);
-      } else {
-        throw new Error('No AI service available');
+      if (!this.deepseekApiKey) {
+        console.warn('⚠️ No Deepseek API key - using pattern extraction');
+        return this.dataExtractionService.extractAllData(text);
       }
+
+      const prompt = this.buildAIExtractionPrompt(text, extractionRules);
+      return await this.extractWithDeepseek(prompt);
     } catch (error) {
-      console.error('AI extraction failed:', error);
+      console.error('Deepseek extraction failed:', error);
       // Fallback to pattern extraction
       return this.dataExtractionService.extractAllData(text);
     }
   }
 
-  async extractWithOpenAI(prompt) {
-    const completion = await this.openai.chat.completions.create({
-      model: "gpt-3.5-turbo", // Cost-effective model
-      messages: [
-        {
-          role: "system",
-          content: "You are an expert at extracting business lead information from web content. Extract only the requested information and return it in valid JSON format."
-        },
-        {
-          role: "user",
-          content: prompt
-        }
-      ],
-      temperature: 0.1,
-      max_tokens: 500 // Reduced for cost savings
-    });
 
-    const response = completion.choices[0].message.content;
-
-    try {
-      return JSON.parse(response);
-    } catch (parseError) {
-      console.error('Failed to parse OpenAI response:', parseError);
-      throw parseError;
-    }
-  }
 
   async extractWithDeepseek(prompt) {
     try {

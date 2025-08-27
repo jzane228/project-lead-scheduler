@@ -1,28 +1,20 @@
 const puppeteer = require('puppeteer');
-const OpenAI = require('openai');
 const cheerio = require('cheerio');
 const axios = require('axios');
 const { Lead, LeadSource } = require('../models');
 
 class WebScraper {
   constructor() {
-    this.openai = null;
+    this.deepseekApiKey = process.env.DEEPSEEK_API_KEY;
     this.browser = null;
     this.maxConcurrent = parseInt(process.env.MAX_CONCURRENT_SCRAPES) || 5;
     this.activeScrapes = 0;
 
-    // Initialize OpenAI only if API key is available
-    if (process.env.OPENAI_API_KEY) {
-      try {
-        this.openai = new OpenAI({
-          apiKey: process.env.OPENAI_API_KEY
-        });
-        console.log('✅ OpenAI client initialized');
-      } catch (error) {
-        console.warn('⚠️ OpenAI package not available or API key invalid');
-      }
+    // Deepseek only
+    if (this.deepseekApiKey) {
+      console.log('✅ Deepseek initialized for web scraping');
     } else {
-      console.warn('⚠️ OpenAI API key not found. AI-powered lead extraction will be disabled.');
+      console.warn('⚠️ DEEPSEEK_API_KEY not found. AI-powered extraction will be disabled.');
     }
   }
 
@@ -120,10 +112,15 @@ class WebScraper {
 
   async extractLeadData(content, extractionRules) {
     try {
+      if (!this.deepseekApiKey) {
+        console.warn('⚠️ No Deepseek API key - using fallback extraction');
+        return this.fallbackExtraction(content, extractionRules);
+      }
+
       const prompt = this.buildExtractionPrompt(content, extractionRules);
-      
-      const completion = await this.openai.chat.completions.create({
-        model: "gpt-4",
+
+      const response = await axios.post('https://api.deepseek.com/v1/chat/completions', {
+        model: "deepseek-chat",
         messages: [
           {
             role: "system",
@@ -135,20 +132,26 @@ class WebScraper {
           }
         ],
         temperature: 0.1,
-        max_tokens: 1000
+        max_tokens: 500
+      }, {
+        headers: {
+          'Authorization': `Bearer ${this.deepseekApiKey}`,
+          'Content-Type': 'application/json'
+        },
+        timeout: 30000
       });
 
-      const response = completion.choices[0].message.content;
-      
+      const content = response.data.choices[0].message.content;
+
       // Parse JSON response
       try {
-        return JSON.parse(response);
+        return JSON.parse(content);
       } catch (parseError) {
-        console.error('Failed to parse OpenAI response:', parseError);
+        console.error('Failed to parse Deepseek response:', parseError);
         return this.fallbackExtraction(content, extractionRules);
       }
     } catch (error) {
-      console.error('OpenAI extraction failed:', error);
+      console.error('Deepseek extraction failed:', error);
       return this.fallbackExtraction(content, extractionRules);
     }
   }

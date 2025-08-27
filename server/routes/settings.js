@@ -351,11 +351,11 @@ router.get('/integrations', auth, async (req, res) => {
         }
       },
       apis: {
-        openai: {
-          isConnected: !!process.env.OPENAI_API_KEY,
-          status: 'connected',
+        deepseek: {
+          isConnected: !!process.env.DEEPSEEK_API_KEY,
+          status: process.env.DEEPSEEK_API_KEY ? 'connected' : 'disconnected',
           usage: '0%',
-          limit: '1000 requests/month'
+          limit: 'Unlimited (pay per token)'
         },
         scrapy: {
           isConnected: !!process.env.SCRAPY_CLOUD_API_KEY,
@@ -421,13 +421,13 @@ router.put('/integrations/crm', auth, async (req, res) => {
 router.get('/api-keys', auth, async (req, res) => {
   try {
     const apiKeys = {
-      openai: {
-        name: 'OpenAI API',
-        key: process.env.OPENAI_API_KEY ? '••••••••••••••••' : null,
-        isSet: !!process.env.OPENAI_API_KEY,
+      deepseek: {
+        name: 'Deepseek API',
+        key: process.env.DEEPSEEK_API_KEY ? '••••••••••••••••' : null,
+        isSet: !!process.env.DEEPSEEK_API_KEY,
         lastUsed: null,
         usage: '0 requests',
-        limit: '1000 requests/month'
+        limit: 'Unlimited (pay per token)'
       },
       scrapy: {
         name: 'Scrapy Cloud API',
@@ -473,7 +473,7 @@ router.post('/api-keys', auth, async (req, res) => {
       return res.status(400).json({ error: 'Service and key are required' });
     }
 
-    const validServices = ['openai', 'scrapy', 'hubspot', 'salesforce'];
+    const validServices = ['deepseek', 'scrapy', 'hubspot', 'salesforce'];
     if (!validServices.includes(service)) {
       return res.status(400).json({ error: 'Invalid service specified' });
     }
@@ -502,7 +502,7 @@ router.delete('/api-keys/:service', auth, async (req, res) => {
   try {
     const { service } = req.params;
 
-    const validServices = ['openai', 'scrapy', 'hubspot', 'salesforce'];
+    const validServices = ['deepseek', 'scrapy', 'hubspot', 'salesforce'];
     if (!validServices.includes(service)) {
       return res.status(400).json({ error: 'Invalid service specified' });
     }
