@@ -17,6 +17,7 @@ import {
 } from '@heroicons/react/24/outline';
 import axios from 'axios';
 import ColumnManager from './ColumnManager';
+import ContactManager from './ContactManager';
 
 const Leads = () => {
   const [selectedLeads, setSelectedLeads] = useState([]);
@@ -38,6 +39,8 @@ const Leads = () => {
   const [showGroupModal, setShowGroupModal] = useState(false);
   const [groupName, setGroupName] = useState('');
   const [showColumnManager, setShowColumnManager] = useState(false);
+  const [showContactManager, setShowContactManager] = useState(false);
+  const [selectedLeadForContacts, setSelectedLeadForContacts] = useState(null);
 
   const queryClient = useQueryClient();
 
@@ -93,7 +96,10 @@ const Leads = () => {
     }
   );
 
-
+  const handleOpenContacts = (lead) => {
+    setSelectedLeadForContacts(lead);
+    setShowContactManager(true);
+  };
 
   // Mutations
   const createLeadMutation = useMutation(
@@ -746,6 +752,13 @@ const Leads = () => {
                                 Edit
                               </button>
                               <button
+                                onClick={() => handleOpenContacts(lead)}
+                                className="inline-flex items-center text-blue-600 hover:text-blue-900 text-sm font-medium"
+                              >
+                                <UserGroupIcon className="h-4 w-4 mr-1" />
+                                Contacts
+                              </button>
+                              <button
                                 onClick={() => handleDeleteLead(lead.id)}
                                 className="text-red-600 hover:text-red-900 text-sm font-medium"
                               >
@@ -834,6 +847,17 @@ const Leads = () => {
       <ColumnManager
         isOpen={showColumnManager}
         onClose={() => setShowColumnManager(false)}
+      />
+
+      {/* Contact Manager */}
+      <ContactManager
+        isOpen={showContactManager}
+        onClose={() => {
+          setShowContactManager(false);
+          setSelectedLeadForContacts(null);
+        }}
+        leadId={selectedLeadForContacts?.id}
+        leadTitle={selectedLeadForContacts?.title}
       />
     </div>
   );

@@ -426,6 +426,89 @@ class DataExtractionService {
     return this.crossValidateAndEnhance(data, text);
   }
 
+  // Extract data using custom columns
+  extractWithCustomColumns(text, customColumns = []) {
+    const data = this.extractAllData(text);
+
+    // Extract custom fields using column descriptions
+    const customData = {};
+    customColumns.forEach(column => {
+      const fieldKey = column.field_key;
+      const description = column.description;
+
+      // Use pattern matching based on column description
+      const extractedValue = this.extractFromDescription(text, description, column.data_type);
+      if (extractedValue && extractedValue !== 'Unknown') {
+        customData[fieldKey] = extractedValue;
+      }
+    });
+
+    return {
+      ...data,
+      ...customData
+    };
+  }
+
+  // Extract data based on natural language description
+  extractFromDescription(text, description, dataType = 'text') {
+    // Convert description to searchable patterns
+    const lowerDesc = description.toLowerCase();
+    const lowerText = text.toLowerCase();
+
+    // Look for patterns that match the description
+    const sentences = text.split(/[.!?]+/);
+
+    for (const sentence of sentences) {
+      const lowerSentence = sentence.toLowerCase();
+
+      // Check if sentence is relevant to the description
+      const descriptionWords = lowerDesc.split(/\s+/);
+      const matches = descriptionWords.filter(word =>
+        word.length > 3 && lowerSentence.includes(word)
+      );
+
+      if (matches.length > descriptionWords.length * 0.5) { // 50% match threshold
+        // Extract the actual value based on data type
+        switch (dataType) {
+          case 'currency':
+          case 'number':
+            const numberMatch = sentence.match(/[\$]?(\d+(?:,\d{3})*(?:\.\d{2})?)/);
+            if (numberMatch) return numberMatch[1].replace(/,/g, '');
+            break;
+
+          case 'date':
+            const dateMatch = sentence.match(/(\d{1,2}[/-]\d{1,2}[/-]\d{2,4}|\d{4}[/-]\d{1,2}[/-]\d{1,2})/);
+            if (dateMatch) return dateMatch[1];
+            break;
+
+          case 'email':
+            const emailMatch = sentence.match(/\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b/);
+            if (emailMatch) return emailMatch[0];
+            break;
+
+          case 'phone':
+            const phoneMatch = sentence.match(/(\+\d{1,3}[-.\s]?)?\(?(\d{3})\)?[-.\s]?(\d{3})[-.\s]?(\d{4})(?:\s*(?:ext|extension|x)\s*(\d+))?/);
+            if (phoneMatch) return phoneMatch[0].replace(/\s+/g, '-').replace(/--+/g, '-');
+            break;
+
+          case 'url':
+            const urlMatch = sentence.match(/https?:\/\/[^\s]+/);
+            if (urlMatch) return urlMatch[0];
+            break;
+
+          default:
+            // For text, try to extract meaningful content
+            const words = sentence.trim().split(/\s+/);
+            if (words.length > 3 && words.length < 20) {
+              return sentence.trim();
+            }
+        }
+      }
+    }
+
+    return 'Unknown';
+  }
+
   extractIndustryTypeFromText(text) {
     if (!text) return "mixed_use";
 
@@ -629,6 +712,167 @@ class DataExtractionService {
     }
 
     return data;
+  }
+
+  // Extract multiple contacts from text
+  extractMultipleContacts(text) {
+    if (!text) return [];
+
+    const contacts = [];
+    const lowerText = text.toLowerCase();
+
+    // Enhanced contact extraction patterns
+    const contactPatterns = [
+      // "Name, Title, Company"
+      /([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*),\s*([^,]+?),\s*([^,\n]+)/g,
+      // "Title Name of Company"
+      /(?:Mr\.?|Mrs\.?|Ms\.?|Dr\.?)?\s*([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*),\s*(?:of|at)\s+([^,\n]+)/g,
+      // "Company Contact: Name"
+      /(?:contact|representative|spokesperson|CEO|CTO|CFO|COO|President|Director|Manager)\s*:?\s*([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*)/g,
+      // "Name (Title)"
+      /([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*)\s*\(([^)]+)\)/g
+    ];
+
+    const extractedContacts = new Set(); // To avoid duplicates
+
+    for (const pattern of contactPatterns) {
+      let match;
+      while ((match = pattern.exec(text)) !== null) {
+        const contactData = this.parseContactMatch(match, text);
+
+        if (contactData && contactData.name) {
+          const contactKey = `${contactData.name}-${contactData.title || ''}-${contactData.company || ''}`.toLowerCase();
+
+          if (!extractedContacts.has(contactKey)) {
+            extractedContacts.add(contactKey);
+            contacts.push(contactData);
+          }
+        }
+
+        // Prevent infinite loop
+        if (contacts.length >= 10) break;
+      }
+
+      if (contacts.length >= 10) break;
+    }
+
+    // Extract email and phone separately and try to match with contacts
+    const emails = this.extractEmailsFromText(text);
+    const phones = this.extractPhonesFromText(text);
+
+    // Match emails and phones to existing contacts
+    contacts.forEach((contact, index) => {
+      if (!contact.email && emails.length > 0) {
+        contact.email = emails.shift();
+      }
+      if (!contact.phone && phones.length > 0) {
+        contact.phone = phones.shift();
+      }
+
+      // Set confidence score based on completeness
+      let confidence = 0.3; // Base confidence
+      if (contact.name) confidence += 0.2;
+      if (contact.title) confidence += 0.2;
+      if (contact.company) confidence += 0.1;
+      if (contact.email) confidence += 0.15;
+      if (contact.phone) confidence += 0.15;
+
+      contact.confidence_score = Math.min(1.0, confidence);
+    });
+
+    // Create additional contacts for unmatched emails/phones
+    [...emails, ...phones].forEach((contactInfo, index) => {
+      const isEmail = contactInfo.includes('@');
+      const contactData = {
+        name: isEmail ? 'Contact' : 'Phone Contact',
+        email: isEmail ? contactInfo : null,
+        phone: !isEmail ? contactInfo : null,
+        contact_type: 'representative',
+        confidence_score: 0.2,
+        source_text: text.substring(Math.max(0, text.indexOf(contactInfo) - 50), text.indexOf(contactInfo) + contactInfo.length + 50)
+      };
+
+      contacts.push(contactData);
+    });
+
+    return contacts.slice(0, 15); // Limit to 15 contacts max
+  }
+
+  parseContactMatch(match, fullText) {
+    const contact = {
+      name: null,
+      title: null,
+      company: null,
+      contact_type: 'representative',
+      confidence_score: 0.5,
+      source_text: match[0]
+    };
+
+    if (match[1] && match[2]) {
+      // Pattern: Name, Title, Company
+      contact.name = match[1].trim();
+      contact.title = match[2].trim();
+      if (match[3]) contact.company = match[3].trim();
+    } else if (match[1] && match[2]) {
+      // Pattern: Title Name of Company
+      contact.title = match[1].trim();
+      contact.name = match[2].trim();
+    } else if (match[1]) {
+      // Pattern: Contact: Name
+      contact.name = match[1].trim();
+      contact.title = 'Representative';
+    }
+
+    // Try to find company if not already set
+    if (!contact.company) {
+      const companyMatch = fullText.match(new RegExp(contact.name + '\\s+(?:of|at)\\s+([^,\\n]+)', 'i'));
+      if (companyMatch) {
+        contact.company = companyMatch[1].trim();
+      }
+    }
+
+    // Validate contact has at least a name
+    if (contact.name && contact.name.length > 2) {
+      return contact;
+    }
+
+    return null;
+  }
+
+  extractEmailsFromText(text) {
+    const emailRegex = /\b([A-Za-z0-9._%+-]+)@([A-Za-z0-9.-]+\.[A-Z|a-z]{2,})\b/g;
+    const emails = [];
+    let match;
+
+    while ((match = emailRegex.exec(text)) !== null) {
+      const email = match[0];
+      if (!emails.includes(email)) {
+        emails.push(email);
+      }
+    }
+
+    return emails;
+  }
+
+  extractPhonesFromText(text) {
+    const phonePatterns = [
+      /(\+\d{1,3}[-.\s]?)?\(?(\d{3})\)?[-.\s]?(\d{3})[-.\s]?(\d{4})(?:\s*(?:ext|extension|x)\s*(\d+))?/g,
+      /(\d{3})[-.\s]?(\d{3})[-.\s]?(\d{4})(?:\s*(?:ext|extension|x)\s*(\d+))?/g,
+      /(\d{3})[-.\s]?(\d{4})[-.\s]?(\d{4})/g,
+      /1?[-.\s]?(\d{3})[-.\s]?(\d{3})[-.\s]?(\d{4})/g
+    ];
+
+    const phones = new Set();
+
+    for (const pattern of phonePatterns) {
+      let match;
+      while ((match = pattern.exec(text)) !== null) {
+        const phone = match[0].replace(/\s+/g, '-').replace(/--+/g, '-');
+        phones.add(phone);
+      }
+    }
+
+    return Array.from(phones);
   }
 
   // Advanced extraction using context clues

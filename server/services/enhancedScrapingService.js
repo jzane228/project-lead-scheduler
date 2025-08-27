@@ -67,18 +67,28 @@ class EnhancedScrapingService {
   async scrapeConfiguration(config, userId) {
     console.log(`🚀 Starting enhanced scraping for config: ${config.name}`);
     console.log(`🔍 Keywords: ${config.keywords.join(', ')}`);
-    
+
     // Use high-quality sources by default if none specified
-    const sourcesToUse = config.sources && config.sources.length > 0 
-      ? config.sources 
+    const sourcesToUse = config.sources && config.sources.length > 0
+      ? config.sources
       : ['scrapy', 'google', 'bing', 'news', 'rss']; // Prioritize Scrapy API first
-    
+
     console.log(`📰 Sources to use: ${sourcesToUse.join(', ')}`);
+
+    // Fetch user's custom columns for extraction
+    let customColumns = [];
+    try {
+      const { Column } = require('../models');
+      customColumns = await Column.findVisibleByUser(userId);
+      console.log(`📊 Loaded ${customColumns.length} custom columns for extraction`);
+    } catch (error) {
+      console.warn('⚠️ Could not load custom columns, proceeding without them:', error.message);
+    }
 
     const allResults = [];
     const errors = [];
     const jobId = `${config.id}-${Date.now()}`;
-    
+
     // Update progress - starting
     this.updateProgress(jobId, 'initializing', 0, sourcesToUse.length, 'Starting enhanced scraping...');
 
@@ -146,8 +156,8 @@ class EnhancedScrapingService {
       // Extract lead data using AI or pattern-based methods
       console.log('🤖 Processing results with data extraction...');
       this.updateProgress(jobId, 'extracting', 0, enrichedResults.length, 'Extracting lead data...');
-      const processedResults = await this.processResultsWithExtraction(enrichedResults, config);
-      console.log(`🤖 Data extraction completed. Processed ${processedResults.length} results.`);
+      const processedResults = await this.processResultsWithExtraction(enrichedResults, config, customColumns);
+      console.log(`🤖 Data extraction completed. Processed ${processedResults.length} results with ${customColumns.length} custom fields.`);
 
       // Save leads to database
       console.log(`💾 Attempting to save ${processedResults.length} leads...`);
@@ -494,67 +504,72 @@ class EnhancedScrapingService {
     return enriched;
   }
 
-  async processResultsWithExtraction(results, config) {
+  async processResultsWithExtraction(results, config, customColumns = []) {
     const processed = [];
-    
+
     for (const result of results) {
       try {
         let extractedData = {};
-        
+
         if (this.deepseekApiKey && config.useAI !== false) {
           // Use Deepseek AI extraction if available
-          extractedData = await this.extractWithAI(result.fullContent, config.data_extraction_rules || {});
+          extractedData = await this.extractWithAI(result.fullContent, config.data_extraction_rules || {}, customColumns);
         } else {
-          // Use pattern-based extraction with improved content
+          // Use pattern-based extraction with improved content and custom columns
           const contentToAnalyze = result.articleText || result.fullContent || result.snippet;
-          extractedData = this.dataExtractionService.extractContextualData(contentToAnalyze);
-          
+          extractedData = this.dataExtractionService.extractWithCustomColumns(contentToAnalyze, customColumns);
+
           // Always try to extract from title and snippet for better results
           const titleSnippetData = this.extractFromTitleAndSnippet(result.title, result.snippet);
           extractedData = { ...extractedData, ...titleSnippetData };
-          
+
           // If we still get mostly "Unknown" values, try enhanced extraction
           if (this.isMostlyUnknown(extractedData)) {
             const enhancedData = this.extractEnhancedData(result.title, result.snippet, contentToAnalyze);
             extractedData = { ...extractedData, ...enhancedData };
           }
         }
-        
+
+        // Mark that AI was used if applicable
+        if (this.deepseekApiKey && config.useAI !== false) {
+          extractedData.aiUsed = true;
+        }
+
         processed.push({
           ...result,
           extractedData
         });
-        
+
       } catch (error) {
         console.error(`❌ Error processing result ${result.url}:`, error);
-        // Fallback to basic extraction
-        const fallbackData = this.dataExtractionService.extractAllData(result.fullContent);
+        // Fallback to basic extraction with custom columns
+        const fallbackData = this.dataExtractionService.extractWithCustomColumns(result.fullContent, customColumns);
         processed.push({
           ...result,
           extractedData: fallbackData
         });
       }
     }
-    
+
     return processed;
   }
 
-  async extractWithAI(text, extractionRules) {
+  async extractWithAI(text, extractionRules, customColumns = []) {
     try {
       if (!this.deepseekApiKey) {
         console.warn('⚠️ No Deepseek API key - using pattern extraction');
-        return this.dataExtractionService.extractAllData(text);
+        return this.dataExtractionService.extractWithCustomColumns(text, customColumns);
       }
 
       // SMART MODE: Try pattern extraction first, only use AI when needed
       if (this.smartMode) {
-        const patternData = this.dataExtractionService.extractAllData(text);
+        const patternData = this.dataExtractionService.extractWithCustomColumns(text, customColumns);
         const confidence = this.calculateConfidence(patternData);
 
         // Only use AI if pattern extraction confidence is low (< 50%)
         if (confidence < 50) {
           console.log(`🤖 Using Deepseek AI (pattern confidence: ${confidence}%)`);
-          const aiData = await this.extractWithDeepseek(this.buildAIExtractionPrompt(text, extractionRules));
+          const aiData = await this.extractWithDeepseek(this.buildAIExtractionPrompt(text, extractionRules, customColumns));
 
           // Merge pattern and AI results, preferring AI when available
           return this.mergeExtractionResults(patternData, aiData);
@@ -565,12 +580,12 @@ class EnhancedScrapingService {
       }
 
       // NORMAL MODE: Always use AI
-      const prompt = this.buildAIExtractionPrompt(text, extractionRules);
+      const prompt = this.buildAIExtractionPrompt(text, extractionRules, customColumns);
       return await this.extractWithDeepseek(prompt);
     } catch (error) {
       console.error('Deepseek extraction failed:', error);
-      // Fallback to pattern extraction
-      return this.dataExtractionService.extractAllData(text);
+      // Fallback to pattern extraction with custom columns
+      return this.dataExtractionService.extractWithCustomColumns(text, customColumns);
     }
   }
 
@@ -682,22 +697,37 @@ class EnhancedScrapingService {
     return results;
   }
 
-  buildAIExtractionPrompt(text, extractionRules) {
+  buildAIExtractionPrompt(text, extractionRules, customColumns = []) {
     // Preprocess text to reduce token usage
     const processedText = this.preprocessText(text);
 
-    // Use only essential fields for cost optimization
+    // Use essential fields + custom columns
     const essentialFields = ['company', 'location', 'projectType', 'budget'];
+    const allFields = [...essentialFields, ...customColumns.map(col => col.field_key)];
 
-    let prompt = `Extract key business information from this content. Return JSON only:\n\n`;
+    let prompt = `Extract specific information from this business article. Return JSON only:\n\n`;
 
+    // Add essential fields
     essentialFields.forEach(field => {
       prompt += `- ${field}: ${this.getFieldDescription(field)}\n`;
     });
 
+    // Add custom columns with their specific descriptions
+    customColumns.forEach(column => {
+      const description = column.description || this.getFieldDescription(column.field_key);
+      prompt += `- ${column.field_key}: ${description}\n`;
+    });
+
     // Limit content to 1500 characters (50% reduction)
     prompt += `\nContent:\n${processedText.substring(0, 1500)}\n\n`;
-    prompt += `Return JSON: {"company":"...", "location":"...", "projectType":"...", "budget":"..."}`;
+
+    // Build JSON template
+    const jsonTemplate = {};
+    allFields.forEach(field => {
+      jsonTemplate[field] = "...";
+    });
+
+    prompt += `Return JSON: ${JSON.stringify(jsonTemplate)}`;
 
     return prompt;
   }
@@ -1135,8 +1165,21 @@ class EnhancedScrapingService {
           }
         }
 
+        // Extract and save contacts for this lead
+        try {
+          const contacts = this.dataExtractionService.extractMultipleContacts(result.articleText || result.fullContent || result.snippet);
+
+          if (contacts.length > 0) {
+            const { Contact } = require('../models');
+            const savedContacts = await Contact.bulkCreateFromExtraction(contacts, lead.id, userId);
+            console.log(`📞 Saved ${savedContacts.length} contacts for lead: ${result.title}`);
+          }
+        } catch (error) {
+          console.log(`⚠️ Could not extract contacts for lead "${result.title}": ${error.message}`);
+        }
+
         savedLeads.push(lead);
-        console.log(`✅ Saved comprehensive lead with ${Object.keys(result.extractedData).length} fields`);
+        console.log(`✅ Saved comprehensive lead with ${Object.keys(result.extractedData).length} fields and contacts`);
 
         // Update progress for saving
         const jobId = `${config.id}-${Date.now()}`;
