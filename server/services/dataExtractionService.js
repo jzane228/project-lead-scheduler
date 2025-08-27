@@ -1,9 +1,11 @@
 class DataExtractionService {
   constructor() {
-    this.deepseekApiKey = process.env.DEEPSEEK_API_KEY;
+    this.deepseekApiKey = null; // DISABLED to avoid costs until quality leads found
     this.apiCallCount = 0;
     this.maxTokensPerRequest = 4000; // Conservative limit for cost control
     this.extractionCache = new Map(); // Cache for similar content
+
+    console.log('🚫 DEEPSEEK AI DISABLED in DataExtractionService to avoid unnecessary costs');
 
     // Common patterns for different types of data
     this.patterns = {
