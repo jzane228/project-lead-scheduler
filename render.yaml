@@ -14,16 +14,16 @@ services:
         generateValue: true
       - key: CORS_ORIGIN
         value: "*"
-      # Database Configuration (you'll need to set these manually)
+      # Database Configuration (your actual Render PostgreSQL values)
       - key: DB_HOST
-        value: "YOUR_DB_HOST_FROM_RENDER"
+        value: "dpg-d2njai0dl3ps73cqadk0-a"
       - key: DB_PORT
         value: "5432"
       - key: DB_NAME
-        value: "lead_generator"
+        value: "project_lead_scheduler_db"
       - key: DB_USER
-        value: "YOUR_DB_USER_FROM_RENDER"
+        value: "project_lead_scheduler_db_user"
       - key: DB_PASSWORD
-        value: "YOUR_DB_PASSWORD_FROM_RENDER"
+        value: "Qrl96EZcUekQvuEPfNK8TXYsh8Jyj3AB"
     healthCheckPath: /api/health
     autoDeploy: true

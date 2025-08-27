@@ -3,7 +3,7 @@ require('dotenv').config();
 
 // Database configuration
 const sequelize = new Sequelize(
-  process.env.DB_NAME || 'lead_generator',
+  process.env.DB_NAME || 'project_lead_scheduler_db',
   process.env.DB_USER || 'jordanzane',
   process.env.DB_PASSWORD || '',
   {
