@@ -30,13 +30,19 @@ class EnhancedScrapingService {
   async initialize() {
     console.log('🚀 Initializing Enhanced Scraping Service...');
     try {
-      // Initialize Scrapy service
-      await this.scrapyService.initialize();
-      console.log('✅ Enhanced Scraping Service initialized successfully');
-      return true;
+      // Initialize Scrapy service (won't fail server if this fails)
+      const scrapyResult = await this.scrapyService.initialize();
+
+      if (scrapyResult) {
+        console.log('✅ Enhanced Scraping Service initialized successfully');
+      } else {
+        console.warn('⚠️ Enhanced Scraping Service initialized with warnings');
+      }
+
+      return true; // Always return true to not block server startup
     } catch (error) {
-      console.error('❌ Failed to initialize Enhanced Scraping Service:', error);
-      return false;
+      console.warn('⚠️ Enhanced Scraping Service initialization failed, but server will continue:', error.message);
+      return true; // Don't fail server startup
     }
   }
 
