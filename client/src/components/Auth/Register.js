@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { EyeIcon, EyeSlashIcon } from '@heroicons/react/24/outline';
+import Logo from './Logo';
 
 const Register = () => {
   const [formData, setFormData] = useState({
@@ -109,23 +110,27 @@ const Register = () => {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-primary-50 to-secondary-100 py-12 px-4 sm:px-6 lg:px-8">
+    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-primary-50 via-white to-secondary-100 py-12 px-4 sm:px-6 lg:px-8">
       <div className="max-w-md w-full space-y-8">
+        {/* Logo and Header */}
         <div className="text-center">
-          <h2 className="text-3xl font-extrabold text-gray-900">
+          <Logo size="large" className="justify-center mb-8" />
+          <h2 className="text-3xl font-bold text-gray-900 mb-2">
             Create your account
           </h2>
-          <p className="mt-2 text-sm text-gray-600">
+          <p className="text-secondary-600">
             Start generating leads today
           </p>
         </div>
 
-        <form className="mt-8 space-y-6 bg-white py-8 px-6 shadow-xl rounded-lg" onSubmit={handleSubmit}>
-          {error && (
-            <div className="rounded-md bg-red-50 p-4">
-              <div className="text-sm text-red-700">{error}</div>
-            </div>
-          )}
+        {/* Register Form Card */}
+        <div className="bg-white py-8 px-6 shadow-xl rounded-2xl border border-secondary-200">
+          <form className="space-y-6" onSubmit={handleSubmit}>
+            {error && (
+              <div className="rounded-xl bg-error-50 p-4 border border-error-200">
+                <div className="text-sm text-error-700">{error}</div>
+              </div>
+            )}
 
           <div className="space-y-4">
             <div className="grid grid-cols-2 gap-4">
@@ -286,25 +291,37 @@ const Register = () => {
             </div>
           </div>
 
-          <div>
-            <button
-              type="submit"
-              disabled={isLoading}
-              className="group relative w-full flex justify-center py-2 px-4 border border-transparent text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              {isLoading ? 'Creating account...' : 'Create account'}
-            </button>
-          </div>
+            <div className="pt-2">
+              <button
+                type="submit"
+                disabled={isLoading}
+                className="group relative w-full flex justify-center py-3 px-4 border border-transparent text-sm font-semibold rounded-xl text-white bg-gradient-to-r from-primary-600 to-primary-700 hover:from-primary-700 hover:to-primary-800 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 shadow-lg hover:shadow-xl"
+              >
+                {isLoading ? (
+                  <div className="flex items-center">
+                    <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                    Creating account...
+                  </div>
+                ) : (
+                  'Create account'
+                )}
+              </button>
+            </div>
 
-          <div className="text-center">
-            <p className="text-sm text-gray-600">
-              Already have an account?{' '}
-              <Link to="/login" className="font-medium text-indigo-600 hover:text-indigo-500">
-                Sign in
-              </Link>
-            </p>
-          </div>
-        </form>
+            {/* Login Link */}
+            <div className="mt-6 text-center">
+              <p className="text-sm text-secondary-600">
+                Already have an account?{' '}
+                <Link to="/login" className="font-semibold text-primary-600 hover:text-primary-700 transition-colors duration-200">
+                  Sign in
+                </Link>
+              </p>
+            </div>
+          </form>
+        </div>
       </div>
     </div>
   );
