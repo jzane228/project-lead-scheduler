@@ -12,6 +12,7 @@ router.get('/profile', auth, async (req, res) => {
       include: [
         {
           model: Industry,
+          as: 'industry',
           attributes: ['id', 'name']
         }
       ]
