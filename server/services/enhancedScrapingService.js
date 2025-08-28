@@ -241,7 +241,7 @@ class EnhancedScrapingService {
   }
 
   async scrapeConfiguration(config, userId, jobId = null) {
-    console.log(`🚀 Starting enhanced scraping for config: ${config.name}`);
+    console.log(`🚀 Starting enhanced scraping for config: ${config.name} (jobId: ${jobId})`);
     console.log(`🔍 Keywords: ${config.keywords.join(', ')}`);
 
     // First try the Advanced Scraping Service with premium APIs

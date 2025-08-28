@@ -208,10 +208,16 @@ class SchedulerService {
 
   // Get progress for a specific job
   getJobProgress(jobId) {
+    console.log(`🔍 getJobProgress called for jobId: ${jobId}`);
+    console.log(`📊 Total active jobs: ${this.activeJobs.size}`);
+
     const job = this.activeJobs.get(jobId);
     if (job) {
+      console.log(`✅ Found job: ${jobId} - Stage: ${job.progress.stage} - Progress: ${job.progress.percentage}%`);
       return job.progress;
     }
+
+    console.log(`❌ Job not found: ${jobId}`);
     return null;
   }
 
@@ -268,6 +274,7 @@ class SchedulerService {
 
       // Generate job ID before running
       const jobId = `config-${configId}-${Date.now()}`;
+      console.log(`🚀 STARTING JOB: ${jobId} for config "${config.name}" (user: ${config.user_id})`);
 
       // Initialize progress tracking immediately
       this.activeJobs.set(jobId, {
@@ -283,6 +290,8 @@ class SchedulerService {
           message: 'Starting enhanced scraping...'
         }
       });
+
+      console.log(`📝 JOB INITIALIZED: ${jobId} - Active jobs count: ${this.activeJobs.size}`);
 
       // Run scraping job asynchronously (don't await)
       this.runScrapingJob(config, jobId).catch(error => {

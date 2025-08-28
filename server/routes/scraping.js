@@ -37,24 +37,70 @@ router.get('/configs', auth, async (req, res) => {
 router.get('/progress/:jobId', auth, async (req, res) => {
   try {
     const { jobId } = req.params;
+    console.log(`🔍 PROGRESS REQUEST: Looking for jobId: ${jobId}`);
 
     // Get progress from scheduler service
     const progress = schedulerService.getJobProgress(jobId);
+    console.log(`📊 PROGRESS RESPONSE: Found progress for ${jobId}:`, progress ? 'YES' : 'NO');
 
     if (!progress) {
+      // Debug: List all active jobs
+      const activeJobs = schedulerService.getActiveJobsForUser(req.user.userId);
+      console.log(`🔍 ACTIVE JOBS for user ${req.user.userId}:`, activeJobs.map(job => ({
+        jobId: job.jobId,
+        configName: job.configName,
+        stage: job.progress.stage,
+        percentage: job.progress.percentage
+      })));
+
       return res.json({
         stage: 'unknown',
         progress: 0,
         total: 1,
         percentage: 0,
-        message: 'Job not found or completed'
+        message: `Job ${jobId} not found or completed. Active jobs: ${activeJobs.length}`
       });
     }
 
+    console.log(`✅ RETURNING PROGRESS: ${progress.stage} - ${progress.percentage}% - ${progress.message}`);
     res.json(progress);
   } catch (error) {
-    console.error('Error fetching progress:', error);
+    console.error('❌ Error fetching progress:', error);
     res.status(500).json({ error: 'Failed to fetch progress' });
+  }
+});
+
+// @route   GET /api/scraping/debug-leads
+// @desc    Debug endpoint to check recent leads in database
+// @access  Private
+router.get('/debug-leads', auth, async (req, res) => {
+  try {
+    const { Lead } = require('../models');
+    const recentLeads = await Lead.findAll({
+      where: { user_id: req.user.userId },
+      order: [['createdAt', 'DESC']],
+      limit: 10,
+      attributes: ['id', 'title', 'url', 'createdAt', 'confidence', 'company']
+    });
+
+    const leadCount = await Lead.count({
+      where: { user_id: req.user.userId }
+    });
+
+    res.json({
+      totalLeads: leadCount,
+      recentLeads: recentLeads.map(lead => ({
+        id: lead.id,
+        title: lead.title,
+        url: lead.url,
+        createdAt: lead.createdAt,
+        confidence: lead.confidence,
+        company: lead.company
+      }))
+    });
+  } catch (error) {
+    console.error('Error fetching debug leads:', error);
+    res.status(500).json({ error: 'Failed to fetch leads' });
   }
 });
 

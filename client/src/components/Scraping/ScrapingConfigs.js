@@ -23,6 +23,7 @@ const ScrapingConfigs = () => {
   const [filters, setFilters] = useState({ group: '' });
   const [currentScrapingJob, setCurrentScrapingJob] = useState(null);
   const [scrapingProgress, setScrapingProgress] = useState(null);
+  const [debugInfo, setDebugInfo] = useState(null);
   const [formData, setFormData] = useState({
     name: '',
     description: '',
@@ -263,12 +264,28 @@ const ScrapingConfigs = () => {
     }
   );
 
+  // Debug function to check database leads
+  const debugDatabaseLeads = async () => {
+    try {
+      const response = await axios.get('/api/scraping/debug-leads');
+      setDebugInfo(response.data);
+      console.log('🔍 DEBUG LEADS:', response.data);
+    } catch (error) {
+      console.error('Error fetching debug leads:', error);
+      toast.error('Failed to fetch debug leads');
+    }
+  };
+
   // Progress polling function
   const startProgressPolling = (jobId) => {
+    console.log(`🔄 STARTING PROGRESS POLLING for jobId: ${jobId}`);
+
     const pollInterval = setInterval(async () => {
       try {
+        console.log(`📡 POLLING PROGRESS for jobId: ${jobId}`);
         const response = await axios.get(`/api/scraping/progress/${jobId}`);
         const progressData = response.data;
+        console.log(`📊 PROGRESS RECEIVED:`, progressData);
 
         setScrapingProgress(progressData);
 
@@ -479,6 +496,12 @@ const ScrapingConfigs = () => {
             ))}
           </select>
           <button
+            onClick={debugDatabaseLeads}
+            className="inline-flex items-center px-3 py-2 border border-yellow-300 rounded-md text-sm font-medium text-yellow-700 bg-yellow-50 hover:bg-yellow-100 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-yellow-500"
+          >
+            🔍 Debug Leads
+          </button>
+          <button
             onClick={() => setShowCreateModal(true)}
             className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
           >
@@ -537,6 +560,32 @@ const ScrapingConfigs = () => {
             queryClient.invalidateQueries(['leads']);
           }}
         />
+      )}
+
+      {/* Debug Information */}
+      {debugInfo && (
+        <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 mb-6">
+          <h3 className="text-lg font-medium text-yellow-800 mb-3">🔍 Database Debug Information</h3>
+          <div className="space-y-2">
+            <p className="text-sm text-yellow-700">
+              <strong>Total Leads in Database:</strong> {debugInfo.totalLeads}
+            </p>
+            <p className="text-sm text-yellow-700">
+              <strong>Recent Leads:</strong>
+            </p>
+            <div className="bg-white rounded p-3 max-h-40 overflow-y-auto">
+              {debugInfo.recentLeads.length > 0 ? (
+                debugInfo.recentLeads.map((lead, index) => (
+                  <div key={lead.id} className="text-xs text-gray-600 mb-1">
+                    {index + 1}. {lead.title} ({lead.company}) - {new Date(lead.createdAt).toLocaleString()}
+                  </div>
+                ))
+              ) : (
+                <p className="text-xs text-gray-500">No leads found in database</p>
+              )}
+            </div>
+          </div>
+        </div>
       )}
 
       {/* Configurations List */}
