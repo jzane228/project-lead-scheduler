@@ -376,10 +376,11 @@ class EnhancedScrapingService {
 
     const allResults = [];
     const errors = [];
-    const jobId = `${config.id}-${Date.now()}`;
+    // jobId is already passed as parameter, use fallback if not provided
+    const finalJobId = jobId || `fallback-${config.id}-${Date.now()}`;
 
     // Update progress - starting
-    this.updateProgress(jobId, 'initializing', 0, sourcesToUse.length, 'Starting enhanced scraping...');
+    this.updateProgress(finalJobId, 'initializing', 0, sourcesToUse.length, 'Starting enhanced scraping...');
 
     try {
       // Use comprehensive multi-engine search
@@ -421,7 +422,7 @@ class EnhancedScrapingService {
           allResults = allResults.concat(engineResults);
 
           // Update progress
-          this.updateProgress(jobId, 'scraping', i + 1, searchEngines.length,
+          this.updateProgress(finalJobId, 'scraping', i + 1, searchEngines.length,
             `Searched ${engine.name} (${engineResults.length} results)...`);
         } else {
           console.warn(`❌ ${engine.name} failed:`, result.reason.message);
@@ -464,7 +465,7 @@ class EnhancedScrapingService {
 
       // Enrich results with full content using Scrapy
       console.log('📖 Enriching results with full content...');
-      this.updateProgress(jobId, 'enriching', 0, limitedResults.length, 'Enriching results with full content...');
+      this.updateProgress(finalJobId, 'enriching', 0, limitedResults.length, 'Enriching results with full content...');
 
       // Filter out problematic URLs and prepare for enrichment
       const enrichmentResults = [];
@@ -508,26 +509,26 @@ class EnhancedScrapingService {
 
       // Extract lead data using enhanced AI and pattern-based methods
       console.log('🤖 Processing results with enhanced data extraction...');
-      this.updateProgress(jobId, 'extracting', 0, allProcessedResults.length, 'Extracting lead data...');
+      this.updateProgress(finalJobId, 'extracting', 0, allProcessedResults.length, 'Extracting lead data...');
       const processedResults = await this.processResultsWithEnhancedExtraction(allProcessedResults, config, customColumns);
       console.log(`🤖 Data extraction completed. Processed ${processedResults.length} results with ${customColumns.length} custom fields.`);
 
       // Save leads to database
       console.log(`💾 Attempting to save ${processedResults.length} leads...`);
-      this.updateProgress(jobId, 'saving', 0, processedResults.length, 'Saving leads to database...');
-      const savedLeads = await this.saveLeads(processedResults, userId, config, customColumns, jobId);
+      this.updateProgress(finalJobId, 'saving', 0, processedResults.length, 'Saving leads to database...');
+      const savedLeads = await this.saveLeads(processedResults, userId, config, customColumns, finalJobId);
 
       console.log(`🎉 Successfully saved ${savedLeads.length} leads.`);
 
       // Update progress - completed
-      this.updateProgress(jobId, 'completed', savedLeads.length, savedLeads.length, `Successfully saved ${savedLeads.length} leads!`);
+      this.updateProgress(finalJobId, 'completed', savedLeads.length, savedLeads.length, `Successfully saved ${savedLeads.length} leads!`);
 
       return {
         totalResults: limitedResults.length,
         savedLeads: savedLeads.length,
         leads: savedLeads,
         errors,
-        jobId
+        finalJobId
       };
 
     } catch (error) {
