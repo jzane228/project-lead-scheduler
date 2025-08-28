@@ -240,7 +240,7 @@ class EnhancedScrapingService {
     }
   }
 
-  async scrapeConfiguration(config, userId) {
+  async scrapeConfiguration(config, userId, jobId = null) {
     console.log(`🚀 Starting enhanced scraping for config: ${config.name}`);
     console.log(`🔍 Keywords: ${config.keywords.join(', ')}`);
 
@@ -248,7 +248,15 @@ class EnhancedScrapingService {
     if (this.usePremiumAPIs) {
       try {
         console.log('🎯 Using Advanced Scraping Service with premium APIs...');
-        const advancedResult = await this.advancedScrapingService.scrapeConfiguration(config, userId);
+
+        // Set up progress callback for advanced service
+        if (jobId) {
+          this.advancedScrapingService.setProgressCallback((progressJobId, stage, progress, total, message) => {
+            this.updateProgress(progressJobId, stage, progress, total, message);
+          });
+        }
+
+        const advancedResult = await this.advancedScrapingService.scrapeConfiguration(config, userId, jobId);
 
         // If we got good results, return them
         if (advancedResult.savedLeads > 0) {
@@ -264,10 +272,10 @@ class EnhancedScrapingService {
 
     // Fallback to traditional enhanced scraping method
     console.log('🔄 Using traditional enhanced scraping method...');
-    return await this.scrapeConfigurationTraditional(config, userId);
+    return await this.scrapeConfigurationTraditional(config, userId, jobId);
   }
 
-  async scrapeConfigurationTraditional(config, userId) {
+  async scrapeConfigurationTraditional(config, userId, jobId = null) {
     console.log(`🚀 Starting traditional enhanced scraping for config: ${config.name}`);
     console.log(`🔍 Keywords: ${config.keywords.join(', ')}`);
 
@@ -507,7 +515,7 @@ class EnhancedScrapingService {
       // Save leads to database
       console.log(`💾 Attempting to save ${processedResults.length} leads...`);
       this.updateProgress(jobId, 'saving', 0, processedResults.length, 'Saving leads to database...');
-      const savedLeads = await this.saveLeads(processedResults, userId, config, customColumns);
+      const savedLeads = await this.saveLeads(processedResults, userId, config, customColumns, jobId);
 
       console.log(`🎉 Successfully saved ${savedLeads.length} leads.`);
 
@@ -2963,7 +2971,7 @@ class EnhancedScrapingService {
     return extracted;
   }
 
-  async saveLeads(processedResults, userId, config, customColumns = []) {
+  async saveLeads(processedResults, userId, config, customColumns = [], jobId = null) {
     const savedLeads = [];
 
     for (let i = 0; i < processedResults.length; i++) {
@@ -3224,8 +3232,9 @@ class EnhancedScrapingService {
         console.log(`✅ Saved comprehensive lead with ${Object.keys(result.extractedData).length} fields and contacts`);
 
         // Update progress for saving
-        const jobId = `${config.id}-${Date.now()}`;
-        this.updateProgress(jobId, 'saving', i + 1, processedResults.length, `Saved ${i + 1} of ${processedResults.length} leads...`);
+        if (jobId) {
+          this.updateProgress(jobId, 'saving', i + 1, processedResults.length, `Saved ${i + 1} of ${processedResults.length} leads...`);
+        }
 
       } catch (error) {
         console.error(`❌ Error saving comprehensive lead:`, error);

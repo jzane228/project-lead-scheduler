@@ -148,8 +148,8 @@ class SchedulerService {
         }
       };
 
-      // Run the scraping
-      const result = await this.scrapingService.scrapeConfiguration(config, config.user_id);
+      // Run the scraping with jobId for progress tracking
+      const result = await this.scrapingService.scrapeConfiguration(config, config.user_id, finalJobId);
 
       // Update final progress
       if (this.activeJobs.has(finalJobId)) {

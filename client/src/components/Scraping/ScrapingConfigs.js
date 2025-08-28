@@ -236,7 +236,12 @@ const ScrapingConfigs = () => {
         console.log('🎉 Scraping started successfully for config:', variables);
         // Use the jobId returned from backend
         const jobId = data.jobId || `config-${variables}-${Date.now()}`;
-        setCurrentScrapingJob({ id: variables, jobId });
+        const config = configsData?.configs?.find(c => c.id === variables);
+        setCurrentScrapingJob({
+          id: variables,
+          jobId,
+          configName: config?.name || `Config ${variables}`
+        });
         setScrapingProgress({
           stage: 'initializing',
           progress: 0,
@@ -524,6 +529,7 @@ const ScrapingConfigs = () => {
         <ScrapingProgress
           jobId={currentScrapingJob.jobId}
           progress={scrapingProgress}
+          configName={currentScrapingJob.configName}
           onComplete={() => {
             setCurrentScrapingJob(null);
             setScrapingProgress(null);

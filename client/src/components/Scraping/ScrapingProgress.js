@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { CheckCircleIcon, ExclamationTriangleIcon, ClockIcon } from '@heroicons/react/24/outline';
 
-const ScrapingProgress = ({ jobId, progress, onComplete }) => {
+const ScrapingProgress = ({ jobId, progress, onComplete, configName }) => {
   const [currentProgress, setCurrentProgress] = useState(progress || {
     stage: 'initializing',
     progress: 0,
@@ -88,7 +88,9 @@ const ScrapingProgress = ({ jobId, progress, onComplete }) => {
         <div className="flex items-center space-x-3">
           {getStageIcon()}
           <div>
-            <h3 className="text-lg font-medium text-gray-900">Enhanced Scraping Progress</h3>
+            <h3 className="text-lg font-medium text-gray-900">
+              {configName ? `${configName} - Scraping Progress` : 'Enhanced Scraping Progress'}
+            </h3>
             <p className="text-sm text-gray-500">{getStageDescription()}</p>
           </div>
         </div>

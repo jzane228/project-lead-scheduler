@@ -31,6 +31,15 @@ class AdvancedScrapingService {
     console.log(`🛡️ Anti-detection: ${this.config.antiDetection.enabled ? 'ENABLED' : 'DISABLED'}`);
     console.log(`✅ Lead verification: ENABLED`);
 
+    // Progress tracking callback (will be set by parent service)
+    this.updateProgress = null;
+  }
+
+  // Set progress callback for tracking
+  setProgressCallback(callback) {
+    this.updateProgress = callback;
+  }
+
     // Start proxy health monitoring
     if (this.config.antiDetection.enabled && this.config.antiDetection.proxies.length > 0) {
       this.startProxyHealthMonitoring();
@@ -42,8 +51,13 @@ class AdvancedScrapingService {
   /**
    * Main scraping function - orchestrates all API sources
    */
-  async scrapeConfiguration(config, userId) {
+  async scrapeConfiguration(config, userId, jobId = null) {
     console.log('🎯 Starting Advanced Scraping with Premium APIs...');
+
+    // Update progress if jobId provided
+    if (this.updateProgress && jobId) {
+      this.updateProgress(jobId, 'scraping', 0, 6, 'Starting advanced web scraping...');
+    }
 
     const keywords = config.keywords || ['hotel', 'development', 'construction'];
     const maxResults = config.max_results_per_run || 50;
