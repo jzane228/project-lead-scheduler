@@ -234,11 +234,20 @@ const ScrapingConfigs = () => {
     {
       onSuccess: (data, variables) => {
         console.log('🎉 Scraping started successfully for config:', variables);
-        // Start progress tracking for enhanced scraping
-        const jobId = `config-${variables}-${Date.now()}`;
+        // Use the jobId returned from backend
+        const jobId = data.jobId || `config-${variables}-${Date.now()}`;
         setCurrentScrapingJob({ id: variables, jobId });
-        setScrapingProgress({ stage: 'initializing', progress: 0, total: 1, percentage: 0, message: 'Starting enhanced scraping...' });
+        setScrapingProgress({
+          stage: 'initializing',
+          progress: 0,
+          total: 1,
+          percentage: 0,
+          message: 'Starting enhanced scraping...'
+        });
         toast.success('Enhanced scraping job started - searching high-quality sources');
+
+        // Start polling for progress updates
+        startProgressPolling(jobId);
       },
       onError: (error) => {
         console.error('❌ Scraping failed:', error);
@@ -248,6 +257,54 @@ const ScrapingConfigs = () => {
       }
     }
   );
+
+  // Progress polling function
+  const startProgressPolling = (jobId) => {
+    const pollInterval = setInterval(async () => {
+      try {
+        const response = await axios.get(`/api/scraping/progress/${jobId}`);
+        const progressData = response.data;
+
+        setScrapingProgress(progressData);
+
+        // Stop polling when job is completed or has error
+        if (progressData.stage === 'completed' || progressData.stage === 'error') {
+          clearInterval(pollInterval);
+          if (progressData.stage === 'completed') {
+            // Refresh leads data after completion
+            queryClient.invalidateQueries(['leads']);
+            queryClient.invalidateQueries(['scrapingConfigs']);
+            toast.success(`Scraping completed! ${progressData.progress} leads saved.`);
+          } else if (progressData.stage === 'error') {
+            toast.error(`Scraping failed: ${progressData.message}`);
+          }
+          // Clear current job after a delay
+          setTimeout(() => {
+            setCurrentScrapingJob(null);
+            setScrapingProgress(null);
+          }, 3000);
+        }
+      } catch (error) {
+        console.error('Error polling progress:', error);
+        // If we can't get progress, stop polling after a few tries
+        if (error.response?.status === 404) {
+          clearInterval(pollInterval);
+          setCurrentScrapingJob(null);
+          setScrapingProgress(null);
+        }
+      }
+    }, 2000); // Poll every 2 seconds
+
+    // Clean up polling after 10 minutes (maximum expected job time)
+    setTimeout(() => {
+      clearInterval(pollInterval);
+      if (currentScrapingJob?.jobId === jobId) {
+        setCurrentScrapingJob(null);
+        setScrapingProgress(null);
+        toast.warning('Progress tracking timed out - job may still be running');
+      }
+    }, 10 * 60 * 1000);
+  };
 
   const resetForm = () => {
     setFormData({

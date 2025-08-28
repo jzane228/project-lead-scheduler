@@ -31,6 +31,33 @@ router.get('/configs', auth, async (req, res) => {
   }
 });
 
+// @route   GET /api/scraping/progress/:jobId
+// @desc    Get progress for a specific scraping job
+// @access  Private
+router.get('/progress/:jobId', auth, async (req, res) => {
+  try {
+    const { jobId } = req.params;
+
+    // Get progress from scheduler service
+    const progress = schedulerService.getJobProgress(jobId);
+
+    if (!progress) {
+      return res.json({
+        stage: 'unknown',
+        progress: 0,
+        total: 1,
+        percentage: 0,
+        message: 'Job not found or completed'
+      });
+    }
+
+    res.json(progress);
+  } catch (error) {
+    console.error('Error fetching progress:', error);
+    res.status(500).json({ error: 'Failed to fetch progress' });
+  }
+});
+
 // @route   GET /api/scraping/configs-auth
 // @desc    Get all scraping configurations for user
 // @access  Private

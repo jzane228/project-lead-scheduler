@@ -5,6 +5,7 @@ const EnhancedScrapingService = require('./enhancedScrapingService');
 class SchedulerService {
   constructor() {
     this.jobs = new Map();
+    this.activeJobs = new Map(); // Track running jobs with progress
     this.scrapingService = new EnhancedScrapingService();
     this.isInitialized = false;
   }
@@ -95,20 +96,77 @@ class SchedulerService {
     }
   }
 
-  async runScrapingJob(config) {
+  async runScrapingJob(config, jobId = null) {
+    // Use provided jobId or generate new one
+    const finalJobId = jobId || `config-${config.id}-${Date.now()}`;
+
     try {
-      console.log(`Running scraping job for config: ${config.name}`);
-      
+      console.log(`Running scraping job for config: ${config.name} (${finalJobId})`);
+
+      // Initialize progress tracking (only if not already initialized)
+      if (!this.activeJobs.has(finalJobId)) {
+        this.activeJobs.set(finalJobId, {
+          configId: config.id,
+          configName: config.name,
+          userId: config.user_id,
+          startTime: new Date(),
+          progress: {
+            stage: 'initializing',
+            progress: 0,
+            total: 1,
+            percentage: 0,
+            message: 'Starting enhanced scraping...'
+          }
+        });
+      }
+
       // Check if user is still active
       const user = await User.findByPk(config.user_id);
       if (!user || !user.is_active) {
         console.log(`User ${config.user_id} is inactive, skipping job`);
+        this.activeJobs.delete(finalJobId);
         return;
       }
 
+      // Set up progress callback for the scraping service
+      const originalUpdateProgress = this.scrapingService.updateProgress;
+      this.scrapingService.updateProgress = (progressJobId, stage, progress, total, message) => {
+        if (this.activeJobs.has(finalJobId)) {
+          const job = this.activeJobs.get(finalJobId);
+          job.progress = {
+            stage,
+            progress,
+            total,
+            percentage: total > 0 ? Math.round((progress / total) * 100) : 0,
+            message
+          };
+          this.activeJobs.set(finalJobId, job);
+        }
+        // Call original method if it exists
+        if (originalUpdateProgress) {
+          originalUpdateProgress.call(this.scrapingService, progressJobId, stage, progress, total, message);
+        }
+      };
+
       // Run the scraping
       const result = await this.scrapingService.scrapeConfiguration(config, config.user_id);
-      
+
+      // Update final progress
+      if (this.activeJobs.has(finalJobId)) {
+        const job = this.activeJobs.get(finalJobId);
+        job.progress = {
+          stage: 'completed',
+          progress: result.savedLeads,
+          total: result.savedLeads,
+          percentage: 100,
+          message: `Successfully saved ${result.savedLeads} leads!`
+        };
+        job.completed = true;
+        job.endTime = new Date();
+        job.result = result;
+        this.activeJobs.set(finalJobId, job);
+      }
+
       // Update configuration with last run time
       await config.update({
         last_run: new Date(),
@@ -116,16 +174,64 @@ class SchedulerService {
       });
 
       console.log(`Scraping job completed for ${config.name}: ${result.savedLeads} leads saved`);
-      
+
+      // Clean up progress after 5 minutes
+      setTimeout(() => {
+        this.activeJobs.delete(finalJobId);
+      }, 5 * 60 * 1000);
+
     } catch (error) {
       console.error(`Error running scraping job for config ${config.id}:`, error);
-      
+
+      // Update progress with error
+      if (this.activeJobs.has(finalJobId)) {
+        const job = this.activeJobs.get(finalJobId);
+        job.progress = {
+          stage: 'error',
+          progress: 0,
+          total: 1,
+          percentage: 0,
+          message: `Error: ${error.message}`
+        };
+        job.error = error.message;
+        job.endTime = new Date();
+        this.activeJobs.set(finalJobId, job);
+      }
+
       // Update configuration with error info
       await config.update({
         last_run: new Date(),
         next_run: this.calculateNextRun(config.frequency)
       });
     }
+  }
+
+  // Get progress for a specific job
+  getJobProgress(jobId) {
+    const job = this.activeJobs.get(jobId);
+    if (job) {
+      return job.progress;
+    }
+    return null;
+  }
+
+  // Get all active jobs for a user
+  getActiveJobsForUser(userId) {
+    const userJobs = [];
+    for (const [jobId, job] of this.activeJobs) {
+      if (job.userId === userId) {
+        userJobs.push({
+          jobId,
+          configId: job.configId,
+          configName: job.configName,
+          progress: job.progress,
+          startTime: job.startTime,
+          completed: job.completed || false,
+          error: job.error || null
+        });
+      }
+    }
+    return userJobs;
   }
 
   async addConfiguration(config) {
@@ -160,9 +266,40 @@ class SchedulerService {
         throw new Error('Configuration not found');
       }
 
-      await this.runScrapingJob(config);
-      return { success: true, message: 'Scraping job completed' };
-      
+      // Generate job ID before running
+      const jobId = `config-${configId}-${Date.now()}`;
+
+      // Initialize progress tracking immediately
+      this.activeJobs.set(jobId, {
+        configId: config.id,
+        configName: config.name,
+        userId: config.user_id,
+        startTime: new Date(),
+        progress: {
+          stage: 'initializing',
+          progress: 0,
+          total: 1,
+          percentage: 0,
+          message: 'Starting enhanced scraping...'
+        }
+      });
+
+      // Run scraping job asynchronously (don't await)
+      this.runScrapingJob(config, jobId).catch(error => {
+        console.error(`Async scraping job failed for config ${configId}:`, error);
+      });
+
+      // Return job ID immediately for progress tracking
+      return {
+        success: true,
+        message: 'Scraping job started',
+        jobId: jobId,
+        config: {
+          id: config.id,
+          name: config.name
+        }
+      };
+
     } catch (error) {
       console.error('Error running configuration now:', error);
       throw error;
