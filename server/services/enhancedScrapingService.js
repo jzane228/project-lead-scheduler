@@ -519,6 +519,12 @@ class EnhancedScrapingService {
       const savedLeads = await this.saveLeads(processedResults, userId, config, customColumns, finalJobId);
 
       console.log(`🎉 Successfully saved ${savedLeads.length} leads.`);
+      console.log(`📊 LEAD DETAILS:`, savedLeads.map(lead => ({
+        id: lead.id,
+        title: lead.title,
+        url: lead.url,
+        company: lead.company
+      })));
 
       // Update progress - completed
       this.updateProgress(finalJobId, 'completed', savedLeads.length, savedLeads.length, `Successfully saved ${savedLeads.length} leads!`);
@@ -3158,8 +3164,7 @@ class EnhancedScrapingService {
 
         // Create lead with error handling
         const lead = await Lead.create(leadData);
-
-        console.log(`✅ Successfully saved lead: ${lead.id}`);
+        console.log(`✅ Successfully saved lead: ${lead.id} - Title: "${lead.title}" - URL: ${lead.url}`);
 
         // Add tags based on keywords and extracted data
         if (keywords.length > 0) {

@@ -235,12 +235,21 @@ const ScrapingConfigs = () => {
     {
       onSuccess: (data, variables) => {
         console.log('🎉 Scraping started successfully for config:', variables);
-        // Use the jobId returned from backend
-        const jobId = data.jobId || `config-${variables}-${Date.now()}`;
+        console.log('📦 Backend response data:', data);
+
+        // CRITICAL: Extract jobId from backend response structure
+        const backendJobId = data.result?.jobId || data.jobId;
+        if (!backendJobId) {
+          console.error('❌ No jobId returned from backend!', data);
+          toast.error('Failed to get job ID from backend');
+          return;
+        }
+
+        console.log(`🔗 Using jobId from backend: ${backendJobId}`);
         const config = configsData?.configs?.find(c => c.id === variables);
         setCurrentScrapingJob({
           id: variables,
-          jobId,
+          jobId: backendJobId, // Use backend jobId
           configName: config?.name || `Config ${variables}`
         });
         setScrapingProgress({
@@ -253,7 +262,8 @@ const ScrapingConfigs = () => {
         toast.success('Enhanced scraping job started - searching high-quality sources');
 
         // Start polling for progress updates
-        startProgressPolling(jobId);
+        console.log(`🔄 STARTING PROGRESS POLLING with jobId: ${backendJobId}`);
+        startProgressPolling(backendJobId);
       },
       onError: (error) => {
         console.error('❌ Scraping failed:', error);
