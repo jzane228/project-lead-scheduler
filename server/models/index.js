@@ -34,6 +34,7 @@ const ExportScheduleFactory = require('./ExportSchedule');
 const CRMIntegrationFactory = require('./CRMIntegration');
 const TagFactory = require('./Tag');
 const ColumnFactory = require('./Column');
+const ContactFactory = require('./Contact');
 
 // Instantiate models
 const User = UserFactory(sequelize);
@@ -45,6 +46,7 @@ const ExportSchedule = ExportScheduleFactory(sequelize);
 const CRMIntegration = CRMIntegrationFactory(sequelize);
 const Tag = TagFactory(sequelize);
 const Column = ColumnFactory(sequelize);
+const Contact = ContactFactory(sequelize);
 
 // Define associations
 User.belongsTo(Industry, { foreignKey: 'industry_id', as: 'industry' });
@@ -106,6 +108,13 @@ Column.belongsToMany(Lead, {
   as: 'leads'
 });
 
+// Contact associations
+User.hasMany(Contact, { foreignKey: 'user_id', as: 'contacts' });
+Contact.belongsTo(User, { foreignKey: 'user_id', as: 'user' });
+
+Lead.hasMany(Contact, { foreignKey: 'lead_id', as: 'contacts' });
+Contact.belongsTo(Lead, { foreignKey: 'lead_id', as: 'lead' });
+
 module.exports = {
   sequelize,
   User,
@@ -116,5 +125,6 @@ module.exports = {
   ExportSchedule,
   CRMIntegration,
   Tag,
-  Column
+  Column,
+  Contact
 };

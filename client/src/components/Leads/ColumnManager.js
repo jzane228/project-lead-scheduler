@@ -588,3 +588,4 @@ const ColumnFormModal = ({ column, onClose, onSuccess }) => {
 };
 
 export default ColumnManager;
+

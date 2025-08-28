@@ -676,3 +676,4 @@ const ContactFormModal = ({ contact, leadId, onClose, onSuccess }) => {
 };
 
 export default ContactManager;
+

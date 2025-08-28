@@ -4,9 +4,16 @@ const { Lead, LeadSource } = require('../models');
 
 class ScrapyService {
   constructor() {
-    this.userAgent = process.env.USER_AGENT || 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36';
+    this.userAgents = [
+      'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+      'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+      'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+      'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:109.0) Gecko/20100101 Firefox/121.0',
+      'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.1 Safari/605.1.15'
+    ];
     this.timeout = 30000;
     this.maxRetries = 3;
+    this.fallbackMethods = ['direct', 'puppeteer', 'proxy'];
   }
 
   async initialize() {
@@ -32,19 +39,52 @@ class ScrapyService {
   }
 
   async scrapeWithScrapy(url, options = {}) {
-    try {
-      console.log(`🕷️ Scraping with Scrapy: ${url}`);
-      
-      // Use Scrapy Cloud API if available, otherwise fallback to direct HTTP
-      if (process.env.SCRAPY_CLOUD_API_KEY) {
+    console.log(`🕷️ Scraping with Scrapy: ${url}`);
+
+    const errors = [];
+
+    // Method 1: Try Scrapy Cloud API if available
+    if (process.env.SCRAPY_CLOUD_API_KEY) {
+      try {
+        console.log(`🔧 Attempting Scrapy Cloud API...`);
         return await this.scrapeWithScrapyCloud(url, options);
-      } else {
-        return await this.scrapeWithDirectHTTP(url, options);
+      } catch (error) {
+        console.warn(`⚠️ Scrapy Cloud failed: ${error.message}`);
+        errors.push({ method: 'scrapy_cloud', error: error.message });
       }
-    } catch (error) {
-      console.error(`❌ Scrapy scraping failed for ${url}:`, error.message);
-      throw error;
     }
+
+    // Method 2: Try direct HTTP with rotating user agents
+    try {
+      console.log(`🔧 Attempting direct HTTP with fallback strategies...`);
+      return await this.scrapeWithFallbackStrategies(url, options);
+    } catch (error) {
+      console.warn(`⚠️ Direct HTTP fallback failed: ${error.message}`);
+      errors.push({ method: 'direct_http', error: error.message });
+    }
+
+    // Method 3: Try Puppeteer browser automation
+    try {
+      console.log(`🔧 Attempting Puppeteer browser automation...`);
+      return await this.scrapeWithPuppeteer(url, options);
+    } catch (error) {
+      console.warn(`⚠️ Puppeteer failed: ${error.message}`);
+      errors.push({ method: 'puppeteer', error: error.message });
+    }
+
+    // Method 4: Try with proxy rotation
+    try {
+      console.log(`🔧 Attempting proxy rotation...`);
+      return await this.scrapeWithProxyRotation(url, options);
+    } catch (error) {
+      console.warn(`⚠️ Proxy rotation failed: ${error.message}`);
+      errors.push({ method: 'proxy', error: error.message });
+    }
+
+    // All methods failed
+    const errorMessage = `All scraping methods failed for ${url}. Errors: ${errors.map(e => `${e.method}: ${e.error}`).join(', ')}`;
+    console.error(`❌ ${errorMessage}`);
+    throw new Error(errorMessage);
   }
 
   async scrapeWithScrapyCloud(url, options = {}) {
@@ -71,72 +111,209 @@ class ScrapyService {
     }
   }
 
-  async scrapeWithDirectHTTP(url, options = {}) {
-    const headers = {
-      'User-Agent': this.userAgent,
-      'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
-      'Accept-Language': 'en-US,en;q=0.9',
-      'Accept-Encoding': 'gzip, deflate, br',
-      'DNT': '1',
-      'Connection': 'keep-alive',
-      'Upgrade-Insecure-Requests': '1',
-      'Cache-Control': 'max-age=0'
-    };
+    async scrapeWithFallbackStrategies(url, options = {}) {
+    const errors = [];
 
-    // Add custom headers if provided
-    if (options.headers) {
-      Object.assign(headers, options.headers);
-    }
-
-    let lastError;
-    for (let attempt = 1; attempt <= this.maxRetries; attempt++) {
+    // Strategy 1: Try with different user agents
+    for (let i = 0; i < Math.min(this.userAgents.length, 3); i++) {
       try {
-        console.log(`📡 HTTP attempt ${attempt} for ${url}`);
+        const headers = {
+          'User-Agent': this.userAgents[i],
+          'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+          'Accept-Language': 'en-US,en;q=0.9',
+          'Accept-Encoding': 'gzip, deflate, br',
+          'DNT': '1',
+          'Connection': 'keep-alive',
+          'Upgrade-Insecure-Requests': '1',
+          'Cache-Control': 'max-age=0',
+          'Sec-Fetch-Dest': 'document',
+          'Sec-Fetch-Mode': 'navigate',
+          'Sec-Fetch-Site': 'none',
+          'Sec-Fetch-User': '?1'
+        };
 
         const response = await axios.get(url, {
           headers,
           timeout: this.timeout,
           maxRedirects: 5,
           validateStatus: (status) => status < 400,
-          responseType: 'text' // Ensure we get text response
+          responseType: 'text',
+          // Add random delay to simulate human behavior
+          ...options
         });
 
-        // Ensure response.data is a string
         let htmlContent = response.data;
         if (typeof htmlContent !== 'string') {
           if (Buffer.isBuffer(htmlContent)) {
             htmlContent = htmlContent.toString('utf-8');
-          } else if (htmlContent && typeof htmlContent === 'object') {
-            // Handle cases where axios returns JSON or other objects
-            htmlContent = JSON.stringify(htmlContent);
           } else {
             htmlContent = String(htmlContent || '');
           }
         }
 
-        // Validate HTML content
-        if (!htmlContent || htmlContent.trim().length === 0) {
-          throw new Error('Empty response from server');
+        if (htmlContent && htmlContent.trim().length > 50) {
+          console.log(`✅ User agent ${i + 1} succeeded`);
+          return this.parseScrapyResponse(htmlContent, url);
         }
-
-        if (htmlContent.length < 50) {
-          throw new Error(`Response too short (${htmlContent.length} characters)`);
-        }
-
-        return this.parseScrapyResponse(htmlContent, url);
       } catch (error) {
-        lastError = error;
-        console.log(`⚠️ Attempt ${attempt} failed: ${error.message}`);
-
-        if (attempt < this.maxRetries) {
-          // Exponential backoff
-          const delay = Math.min(1000 * Math.pow(2, attempt - 1), 10000);
-          await new Promise(resolve => setTimeout(resolve, delay));
-        }
+        errors.push(`User agent ${i + 1}: ${error.message}`);
       }
     }
 
-    throw new Error(`Failed after ${this.maxRetries} attempts: ${lastError.message}`);
+    // Strategy 2: Try with minimal headers
+    try {
+      const minimalHeaders = {
+        'User-Agent': this.userAgents[0],
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8'
+      };
+
+      const response = await axios.get(url, {
+        headers: minimalHeaders,
+        timeout: this.timeout,
+        maxRedirects: 5,
+        responseType: 'text'
+      });
+
+      let htmlContent = response.data;
+      if (typeof htmlContent !== 'string') {
+        htmlContent = String(htmlContent || '');
+      }
+
+      if (htmlContent && htmlContent.trim().length > 50) {
+        console.log(`✅ Minimal headers succeeded`);
+        return this.parseScrapyResponse(htmlContent, url);
+      }
+    } catch (error) {
+      errors.push(`Minimal headers: ${error.message}`);
+    }
+
+    // Strategy 3: Try without common blocking headers
+    try {
+      const basicHeaders = {
+        'User-Agent': this.userAgents[0],
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+        'Accept-Language': 'en-US,en;q=0.9'
+      };
+
+      const response = await axios.get(url, {
+        headers: basicHeaders,
+        timeout: this.timeout * 2, // Longer timeout
+        maxRedirects: 3,
+        responseType: 'text'
+      });
+
+      let htmlContent = response.data;
+      if (typeof htmlContent !== 'string') {
+        htmlContent = String(htmlContent || '');
+      }
+
+      if (htmlContent && htmlContent.trim().length > 50) {
+        console.log(`✅ Basic headers succeeded`);
+        return this.parseScrapyResponse(htmlContent, url);
+      }
+    } catch (error) {
+      errors.push(`Basic headers: ${error.message}`);
+    }
+
+    throw new Error(`All fallback strategies failed: ${errors.join(', ')}`);
+  }
+
+  async scrapeWithPuppeteer(url, options = {}) {
+    try {
+      // Import puppeteer dynamically to avoid issues if not installed
+      const puppeteer = require('puppeteer');
+
+      const browser = await puppeteer.launch({
+        headless: 'new',
+        args: [
+          '--no-sandbox',
+          '--disable-setuid-sandbox',
+          '--disable-dev-shm-usage',
+          '--disable-accelerated-2d-canvas',
+          '--no-first-run',
+          '--no-zygote',
+          '--disable-gpu',
+          '--disable-web-security',
+          '--disable-features=VizDisplayCompositor'
+        ]
+      });
+
+      const page = await browser.newPage();
+
+      // Set random viewport
+      await page.setViewport({
+        width: 1366 + Math.floor(Math.random() * 200),
+        height: 768 + Math.floor(Math.random() * 200)
+      });
+
+      // Set random user agent
+      const randomUserAgent = this.userAgents[Math.floor(Math.random() * this.userAgents.length)];
+      await page.setUserAgent(randomUserAgent);
+
+      // Navigate with timeout
+      await page.goto(url, {
+        waitUntil: 'networkidle2',
+        timeout: this.timeout * 2
+      });
+
+      // Wait a random amount to simulate human behavior
+      await page.waitForTimeout(1000 + Math.random() * 2000);
+
+      // Get the HTML content
+      const content = await page.content();
+
+      await browser.close();
+
+      if (content && content.trim().length > 50) {
+        console.log(`✅ Puppeteer scraping succeeded`);
+        return this.parseScrapyResponse(content, url);
+      } else {
+        throw new Error('Puppeteer returned insufficient content');
+      }
+    } catch (error) {
+      console.error(`❌ Puppeteer scraping failed:`, error.message);
+      throw error;
+    }
+  }
+
+  async scrapeWithProxyRotation(url, options = {}) {
+    // This would require proxy service integration
+    // For now, fall back to direct HTTP with different approach
+    console.log(`🔄 Proxy rotation not configured, using enhanced direct HTTP...`);
+
+    const headers = {
+      'User-Agent': this.userAgents[Math.floor(Math.random() * this.userAgents.length)],
+      'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+      'Accept-Language': 'en-US,en;q=0.9',
+      'Cache-Control': 'no-cache',
+      'Pragma': 'no-cache'
+    };
+
+    const response = await axios.get(url, {
+      headers,
+      timeout: this.timeout * 3,
+      maxRedirects: 3,
+      responseType: 'text',
+      // Add random query parameter to avoid caching
+      params: { _t: Date.now() }
+    });
+
+    let htmlContent = response.data;
+    if (typeof htmlContent !== 'string') {
+      htmlContent = String(htmlContent || '');
+    }
+
+    if (htmlContent && htmlContent.trim().length > 50) {
+      console.log(`✅ Enhanced direct HTTP succeeded`);
+      return this.parseScrapyResponse(htmlContent, url);
+    } else {
+      throw new Error('Enhanced direct HTTP returned insufficient content');
+    }
+  }
+
+  async scrapeWithDirectHTTP(url, options = {}) {
+    // Use the new fallback strategies as the primary method
+    return await this.scrapeWithFallbackStrategies(url, options);
   }
 
   parseScrapyResponse(html, url) {

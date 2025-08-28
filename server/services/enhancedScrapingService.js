@@ -1,5 +1,6 @@
 const ScrapyService = require('./scrapyService');
 const DataExtractionService = require('./dataExtractionService');
+const AdvancedScrapingService = require('./advancedScrapingService');
 const axios = require('axios');
 const { Lead, LeadSource } = require('../models');
 
@@ -173,6 +174,7 @@ class EnhancedScrapingService {
   constructor() {
     this.scrapyService = new ScrapyService();
     this.dataExtractionService = new DataExtractionService();
+    this.advancedScrapingService = new AdvancedScrapingService();
     this.monitor = new ScrapingMonitor(); // Initialize monitoring service
     this.deepseekApiKey = process.env.DEEPSEEK_API_KEY;
     this.progressCallbacks = new Map();
@@ -181,6 +183,9 @@ class EnhancedScrapingService {
     this.extractionCache = new Map(); // Cache for similar content
     this.apiCallCount = 0; // Track usage
     this.smartMode = process.env.SMART_EXTRACTION === 'true'; // Enable smart mode
+
+    // Enable premium APIs
+    this.usePremiumAPIs = process.env.USE_PREMIUM_APIS !== 'false';
 
     // Deepseek only - no OpenAI fallback
     if (this.deepseekApiKey) {
@@ -191,6 +196,10 @@ class EnhancedScrapingService {
     } else {
       console.log('⚠️ DEEPSEEK_API_KEY not found - set it in environment variables');
       console.log('   Get your key from: https://platform.deepseek.com/');
+    }
+
+    if (this.usePremiumAPIs) {
+      console.log('🚀 Advanced Scraping Service with Premium APIs enabled');
     }
   }
 
@@ -233,6 +242,33 @@ class EnhancedScrapingService {
 
   async scrapeConfiguration(config, userId) {
     console.log(`🚀 Starting enhanced scraping for config: ${config.name}`);
+    console.log(`🔍 Keywords: ${config.keywords.join(', ')}`);
+
+    // First try the Advanced Scraping Service with premium APIs
+    if (this.usePremiumAPIs) {
+      try {
+        console.log('🎯 Using Advanced Scraping Service with premium APIs...');
+        const advancedResult = await this.advancedScrapingService.scrapeConfiguration(config, userId);
+
+        // If we got good results, return them
+        if (advancedResult.savedLeads > 0) {
+          console.log(`✅ Advanced Scraping Service found ${advancedResult.savedLeads} leads with guaranteed URLs`);
+          return advancedResult;
+        } else {
+          console.log('⚠️ Advanced Scraping Service found no leads, falling back to traditional methods');
+        }
+      } catch (error) {
+        console.warn('⚠️ Advanced Scraping Service failed, falling back to traditional methods:', error.message);
+      }
+    }
+
+    // Fallback to traditional enhanced scraping method
+    console.log('🔄 Using traditional enhanced scraping method...');
+    return await this.scrapeConfigurationTraditional(config, userId);
+  }
+
+  async scrapeConfigurationTraditional(config, userId) {
+    console.log(`🚀 Starting traditional enhanced scraping for config: ${config.name}`);
     console.log(`🔍 Keywords: ${config.keywords.join(', ')}`);
 
     // Use high-quality sources by default if none specified

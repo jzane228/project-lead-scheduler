@@ -62,88 +62,310 @@ class DataExtractionService {
 
   extractCompanyFromText(text) {
     if (!text) return "Unknown";
-    
-    // Enhanced company extraction patterns
+
+    // Ultra-enhanced company extraction with multiple strategies
     const enhancedPatterns = [
-      // Company announces/develops pattern
-      /([A-Z][a-zA-Z\s&.,]+?)\s+(?:announces|launches|develops|constructs|expands|opens|plans|proposes)/i,
-      // Announced by company pattern
-      /(?:announced by|developed by|constructed by|launched by)\s+([A-Z][a-zA-Z\s&.,]+?)(?:\s|$|,|\.)/i,
-      // Company name followed by project type
-      /([A-Z][a-zA-Z\s&.,]+?)\s+(?:hotel|resort|apartment|office|building|complex|development|project)/i,
-      // Company name in quotes or parentheses
+      // Direct company announcements
+      /([A-Z][a-zA-Z\s&.,]+?)\s+(?:announces|launches|develops|constructs|expands|opens|plans|proposes|unveils|reveals)/i,
+      /(?:announced by|developed by|constructed by|launched by|planned by|proposed by)\s+([A-Z][a-zA-Z\s&.,]+?)(?:\s|$|,|\.)/i,
+
+      // Company followed by business terms
+      /([A-Z][a-zA-Z\s&.,]+?)\s+(?:Inc|LLC|Corp|Corporation|Group|Holdings|Enterprises|Partners|Associates|Company|Ltd|Limited)/i,
+      /([A-Z][a-zA-Z\s&.,]+?)\s+(?:hotel|resort|apartment|office|building|complex|development|project|property|real estate)/i,
+
+      // Quoted or parenthetical company names
       /["']([A-Z][a-zA-Z\s&.,]+?)["']/,
       /\(([A-Z][a-zA-Z\s&.,]+?)\)/,
+
+      // Company name with "the" prefix
+      /(?:the\s+)([A-Z][a-zA-Z\s&.,]+?)\s+(?:company|group|corporation|inc|llc)/i,
+
+      // Real estate development companies
+      /([A-Z][a-zA-Z\s&.,]+?)\s+(?:Realty|Properties|Developers|Construction|Builders|Hospitality)/i,
+
       // Original patterns
       ...this.patterns.company
     ];
-    
+
     for (const pattern of enhancedPatterns) {
       const match = text.match(pattern);
       if (match && match[1]) {
         const company = match[1].trim();
-        // Clean up common artifacts and validate
-        const cleaned = company.replace(/^(the\s+|a\s+)/i, '').replace(/[.,]$/, '');
-        if (cleaned.length > 2 && cleaned.length < 50) {
+
+        // Enhanced cleaning and validation
+        let cleaned = company
+          .replace(/^(the\s+|a\s+|an\s+)/i, '') // Remove articles
+          .replace(/[.,;]$/, '') // Remove trailing punctuation
+          .replace(/\s+/g, ' ') // Normalize spaces
+          .trim();
+
+        // Validate company name quality
+        if (this.isValidCompanyName(cleaned)) {
           return cleaned;
         }
       }
     }
-    
-    // Try to extract from title if it looks like a company name
-    const words = text.split(/\s+/);
-    for (let i = 0; i < Math.min(3, words.length); i++) {
-      const word = words[i];
-      if (word.match(/^[A-Z][a-z]+$/) && word.length > 3) {
-        return word;
+
+    // Try named entity extraction from title
+    const titleWords = text.split(/\s+/);
+    const potentialCompanies = [];
+
+    for (let i = 0; i < Math.min(5, titleWords.length); i++) {
+      const word = titleWords[i];
+
+      // Look for capitalized words that could be company names
+      if (word.match(/^[A-Z][a-zA-Z]+$/) && word.length > 3) {
+        // Check if it's followed by company indicators
+        const nextWords = titleWords.slice(i + 1, i + 3).join(' ').toLowerCase();
+        if (nextWords.includes('announces') || nextWords.includes('develops') ||
+            nextWords.includes('launches') || nextWords.includes('opens')) {
+          potentialCompanies.push(word);
+        }
       }
     }
-    
+
+    if (potentialCompanies.length > 0) {
+      return potentialCompanies[0];
+    }
+
     return "Unknown";
+  }
+
+  isValidCompanyName(name) {
+    if (!name || name.length < 2 || name.length > 60) return false;
+
+    // Reject if it's just a common word
+    const commonWords = ['the', 'and', 'for', 'with', 'new', 'old', 'big', 'small', 'first', 'last'];
+    if (commonWords.includes(name.toLowerCase())) return false;
+
+    // Reject if it contains only numbers
+    if (/^\d+$/.test(name)) return false;
+
+    // Reject if it looks like a date or number
+    if (/^\d{1,2}\/\d{1,2}\/\d{2,4}$|^\d{4}$|^\$\d+/.test(name)) return false;
+
+    // Reject location-like names without company context
+    const locationWords = ['downtown', 'uptown', 'midtown', 'north', 'south', 'east', 'west', 'central'];
+    if (locationWords.includes(name.toLowerCase())) return false;
+
+    return true;
   }
 
   extractLocationFromText(text) {
     if (!text) return "Unknown";
-    
-    // Enhanced location extraction patterns
+
+    // Ultra-enhanced location extraction patterns
     const enhancedPatterns = [
       // Location followed by project type
       /([A-Z][a-zA-Z\s,]+?)\s+(?:hotel|resort|apartment|office|building|complex|development|project)/i,
       // Project type in location
-      /(?:hotel|resort|apartment|office|building|complex|development|project)\s+(?:in|at|near)\s+([A-Z][a-zA-Z\s,]+?)(?:\s|$|,|\.)/i,
+      /(?:hotel|resort|apartment|office|building|complex|development|project)\s+(?:in|at|near|within|located in)\s+([A-Z][a-zA-Z\s,]+?)(?:\s|$|,|\.)/i,
       // Common city/state patterns
       /([A-Z][a-zA-Z\s]+?),\s*([A-Z]{2})/i, // City, State
-      /([A-Z][a-zA-Z\s]+?)\s+(?:County|City|District|Area|Region)/i,
+      /([A-Z][a-zA-Z\s]+?)\s+(?:County|City|District|Area|Region|Borough)/i,
+      // Address patterns
+      /(\d+)\s+([A-Z][a-zA-Z\s]+?)\s+(?:Street|St|Avenue|Ave|Road|Rd|Boulevard|Blvd|Drive|Dr|Lane|Ln|Way|Place|Pl|Court|Ct)/i,
+      // Neighborhood/district patterns
+      /(?:downtown|uptown|midtown|historic district|business district|financial district)\s+([A-Z][a-zA-Z\s,]+)/i,
       // Original patterns
       ...this.patterns.location
     ];
-    
+
     for (const pattern of enhancedPatterns) {
       const match = text.match(pattern);
       if (match && match[1]) {
         const location = match[1].trim();
         // Clean up common artifacts and validate
-        const cleaned = location.replace(/[.,]$/, '');
-        if (cleaned.length > 2 && cleaned.length < 50) {
+        const cleaned = location.replace(/[.,]$/, '').replace(/\s+/g, ' ').trim();
+        if (this.isValidLocation(cleaned)) {
           return cleaned;
         }
       }
     }
-    
+
     // Try to extract from title if it looks like a location
     const words = text.split(/\s+/);
     for (let i = 0; i < Math.min(5, words.length); i++) {
       const word = words[i];
       if (word.match(/^[A-Z][a-z]+$/) && word.length > 3) {
         // Check if it's not already identified as a company
-        if (!text.toLowerCase().includes(word.toLowerCase() + ' announces') &&
-            !text.toLowerCase().includes(word.toLowerCase() + ' develops')) {
+        const context = words.slice(i - 2, i + 3).join(' ').toLowerCase();
+        if (!context.includes('announces') && !context.includes('develops') && !context.includes('launches')) {
           return word;
         }
       }
     }
-    
+
     return "Unknown";
+  }
+
+  isValidLocation(location) {
+    if (!location || location.length < 2 || location.length > 60) return false;
+
+    // Reject if it's just a common word
+    const commonWords = ['the', 'and', 'for', 'with', 'new', 'old', 'big', 'small'];
+    if (commonWords.includes(location.toLowerCase())) return false;
+
+    // Reject if it contains only numbers
+    if (/^\d+$/.test(location)) return false;
+
+    return true;
+  }
+
+  /**
+   * Extract contact information from text
+   */
+  extractContactsFromText(text, maxContacts = 3) {
+    if (!text) return [];
+
+    const contacts = [];
+    const contactPatterns = [
+      // Email patterns
+      /([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})/g,
+
+      // Phone patterns (various formats)
+      /(\+?1?[-.\s]?)?\(?([0-9]{3})\)?[-.\s]?([0-9]{3})[-.\s]?([0-9]{4})/g,
+      /([0-9]{3})[-.\s]?([0-9]{3})[-.\s]?([0-9]{4})/g,
+
+      // Name patterns (look for names near contact info)
+      /([A-Z][a-z]+(?:\s+[A-Z][a-z]+)+?)(?:\s*,?\s*(?:CEO|CTO|CFO|President|Director|Manager|VP|Vice President|Contact))/gi
+    ];
+
+    // Extract emails
+    const emails = [];
+    const emailMatches = text.match(contactPatterns[0]) || [];
+    emailMatches.forEach(email => {
+      if (!emails.includes(email.toLowerCase())) {
+        emails.push(email.toLowerCase());
+      }
+    });
+
+    // Extract phones
+    const phones = [];
+    contactPatterns.slice(1, 3).forEach(pattern => {
+      const matches = text.match(pattern) || [];
+      matches.forEach(phone => {
+        const cleanPhone = phone.replace(/[^\d]/g, '');
+        if (cleanPhone.length >= 10 && !phones.includes(cleanPhone)) {
+          phones.push(cleanPhone);
+        }
+      });
+    });
+
+    // Extract names
+    const names = [];
+    const nameMatches = text.match(contactPatterns[3]) || [];
+    nameMatches.forEach(name => {
+      if (!names.includes(name.trim())) {
+        names.push(name.trim());
+      }
+    });
+
+    // Create contact objects by intelligently matching names, emails, and phones
+    const maxContactsFound = Math.max(emails.length, phones.length, names.length);
+
+    for (let i = 0; i < Math.min(maxContactsFound, maxContacts); i++) {
+      const contact = {
+        name: names[i] || this.extractNameNearContact(text, emails[i], phones[i]),
+        email: emails[i],
+        phone: phones[i] ? this.formatPhoneNumber(phones[i]) : undefined,
+        title: this.extractTitleFromContext(text, names[i]),
+        company: this.extractCompanyFromText(text),
+        confidence: this.calculateContactConfidence({
+          name: names[i] || emails[i] || phones[i],
+          email: emails[i],
+          phone: phones[i]
+        })
+      };
+
+      if (contact.name || contact.email || contact.phone) {
+        contacts.push(contact);
+      }
+    }
+
+    return contacts;
+  }
+
+  extractNameNearContact(text, email, phone) {
+    if (!email && !phone) return undefined;
+
+    const searchText = email || phone;
+    const index = text.indexOf(searchText);
+
+    if (index === -1) return undefined;
+
+    // Look for name in the 100 characters before the contact info
+    const contextStart = Math.max(0, index - 100);
+    const context = text.substring(contextStart, index);
+    const words = context.split(/\s+/);
+
+    // Look for potential names (2-3 word capitalized sequences)
+    for (let i = words.length - 1; i >= Math.max(0, words.length - 5); i--) {
+      const potentialName = words.slice(i).join(' ');
+      if (this.isValidName(potentialName)) {
+        return potentialName;
+      }
+    }
+
+    return undefined;
+  }
+
+  isValidName(name) {
+    if (!name || name.length < 2 || name.length > 50) return false;
+
+    const words = name.split(/\s+/);
+    if (words.length > 4) return false; // Too many words
+
+    // Check if words look like names (capitalized)
+    return words.every(word => /^[A-Z][a-z]+$/.test(word) && word.length >= 2);
+  }
+
+  extractTitleFromContext(text, name) {
+    if (!name) return undefined;
+
+    const nameIndex = text.indexOf(name);
+    if (nameIndex === -1) return undefined;
+
+    // Look for titles after the name
+    const contextAfter = text.substring(nameIndex, nameIndex + 200);
+    const titlePatterns = [
+      /(?:,|\s+)(CEO|CTO|CFO|President|Director|Manager|VP|Vice President|Chief Executive|Chief Technology|Chief Financial|General Manager|Project Manager|Development Manager)/i,
+      /(?:,|\s+)([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*\s+(?:Director|Manager|President|Officer))/i
+    ];
+
+    for (const pattern of titlePatterns) {
+      const match = contextAfter.match(pattern);
+      if (match && match[1]) {
+        return match[1].trim();
+      }
+    }
+
+    return undefined;
+  }
+
+  formatPhoneNumber(phone) {
+    const cleaned = phone.replace(/\D/g, '');
+    if (cleaned.length === 10) {
+      return `(${cleaned.slice(0, 3)}) ${cleaned.slice(3, 6)}-${cleaned.slice(6)}`;
+    } else if (cleaned.length === 11 && cleaned.startsWith('1')) {
+      return `+1 (${cleaned.slice(1, 4)}) ${cleaned.slice(4, 7)}-${cleaned.slice(7)}`;
+    }
+    return phone; // Return original if can't format
+  }
+
+  calculateContactConfidence(contact) {
+    let score = 0;
+
+    if (contact.name) score += 40;
+    if (contact.email) score += 35;
+    if (contact.phone) score += 25;
+    if (contact.title) score += 15;
+
+    // Bonus for having multiple contact methods
+    const contactMethods = [contact.name, contact.email, contact.phone].filter(Boolean).length;
+    if (contactMethods >= 2) score += 20;
+
+    return Math.min(score, 100);
   }
 
   extractProjectTypeFromText(text) {
