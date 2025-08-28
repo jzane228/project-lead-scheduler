@@ -33,17 +33,16 @@ class AdvancedScrapingService {
 
     // Progress tracking callback (will be set by parent service)
     this.updateProgress = null;
-  }
-
-  // Set progress callback for tracking
-  setProgressCallback(callback) {
-    this.updateProgress = callback;
-  }
 
     // Start proxy health monitoring
     if (this.config.antiDetection.enabled && this.config.antiDetection.proxies.length > 0) {
       this.startProxyHealthMonitoring();
     }
+  }
+
+  // Set progress callback for tracking
+  setProgressCallback(callback) {
+    this.updateProgress = callback;
   }
 
 
