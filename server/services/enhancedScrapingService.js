@@ -3163,8 +3163,23 @@ class EnhancedScrapingService {
         });
 
         // Create lead with error handling
+        console.log(`💾 CREATING LEAD:`, {
+          title: leadData.title?.substring(0, 50),
+          url: leadData.url,
+          company: leadData.company,
+          user_id: leadData.user_id
+        });
+
         const lead = await Lead.create(leadData);
-        console.log(`✅ Successfully saved lead: ${lead.id} - Title: "${lead.title}" - URL: ${lead.url}`);
+        console.log(`✅ Successfully saved lead: ${lead.id} - Title: "${lead.title}" - URL: ${lead.url} - DB CONFIRMED`);
+
+        // Verify the lead was actually saved by querying it back
+        const verifyLead = await Lead.findByPk(lead.id);
+        if (verifyLead) {
+          console.log(`🔍 VERIFICATION: Lead ${lead.id} confirmed in database`);
+        } else {
+          console.error(`❌ VERIFICATION FAILED: Lead ${lead.id} not found in database after save!`);
+        }
 
         // Add tags based on keywords and extracted data
         if (keywords.length > 0) {

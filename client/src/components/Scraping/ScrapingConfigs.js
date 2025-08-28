@@ -288,16 +288,24 @@ const ScrapingConfigs = () => {
 
   // Progress polling function
   const startProgressPolling = (jobId) => {
-    console.log(`🔄 STARTING PROGRESS POLLING for jobId: ${jobId}`);
+    console.log(`🔄 STARTING PROGRESS POLLING for jobId: ${jobId} (every 10 seconds)`);
+
+    let failedAttempts = 0;
+    const maxFailedAttempts = 10;
 
     const pollInterval = setInterval(async () => {
       try {
-        console.log(`📡 POLLING PROGRESS for jobId: ${jobId}`);
+        // Only log every 5th request to reduce console spam
+        const shouldLog = Math.random() < 0.2;
+        if (shouldLog) console.log(`📡 POLLING PROGRESS for jobId: ${jobId}`);
+
         const response = await axios.get(`/api/scraping/progress/${jobId}`);
         const progressData = response.data;
-        console.log(`📊 PROGRESS RECEIVED:`, progressData);
+
+        if (shouldLog) console.log(`📊 PROGRESS RECEIVED:`, progressData);
 
         setScrapingProgress(progressData);
+        failedAttempts = 0; // Reset failed attempts on success
 
         // Stop polling when job is completed or has error
         if (progressData.stage === 'completed' || progressData.stage === 'error') {
@@ -317,17 +325,30 @@ const ScrapingConfigs = () => {
           }, 3000);
         }
       } catch (error) {
-        console.error('Error polling progress:', error);
+        failedAttempts++;
+        console.error(`Error polling progress (${failedAttempts}/${maxFailedAttempts}):`, error);
+
+        // Circuit breaker: Stop polling after too many failures
+        if (failedAttempts >= maxFailedAttempts) {
+          console.error('🚫 Circuit breaker activated: Too many failed polling attempts');
+          clearInterval(pollInterval);
+          setCurrentScrapingJob(null);
+          setScrapingProgress(null);
+          toast.error('Progress tracking failed - please check server status');
+          return;
+        }
+
         // If we can't get progress, stop polling after a few tries
         if (error.response?.status === 404) {
+          console.warn('Job not found, stopping polling');
           clearInterval(pollInterval);
           setCurrentScrapingJob(null);
           setScrapingProgress(null);
         }
       }
-    }, 2000); // Poll every 2 seconds
+    }, 10000); // Poll every 10 seconds (reduced from 2 seconds)
 
-    // Clean up polling after 10 minutes (maximum expected job time)
+    // Clean up polling after 15 minutes (maximum expected job time)
     setTimeout(() => {
       clearInterval(pollInterval);
       if (currentScrapingJob?.jobId === jobId) {
@@ -335,7 +356,7 @@ const ScrapingConfigs = () => {
         setScrapingProgress(null);
         toast.warning('Progress tracking timed out - job may still be running');
       }
-    }, 10 * 60 * 1000);
+    }, 15 * 60 * 1000);
   };
 
   const resetForm = () => {

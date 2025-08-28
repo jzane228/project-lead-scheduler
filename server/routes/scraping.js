@@ -76,27 +76,32 @@ router.get('/progress/:jobId', auth, async (req, res) => {
 router.get('/debug-leads', auth, async (req, res) => {
   try {
     const { Lead } = require('../models');
-    const recentLeads = await Lead.findAll({
+
+    // Get all leads for this user
+    const allLeads = await Lead.findAll({
       where: { user_id: req.user.userId },
       order: [['createdAt', 'DESC']],
-      limit: 10,
-      attributes: ['id', 'title', 'url', 'createdAt', 'confidence', 'company']
+      attributes: ['id', 'title', 'url', 'createdAt', 'confidence', 'company', 'description']
     });
 
-    const leadCount = await Lead.count({
-      where: { user_id: req.user.userId }
-    });
+    // Get leads from last 24 hours
+    const last24Hours = new Date(Date.now() - 24 * 60 * 60 * 1000);
+    const recentLeads = allLeads.filter(lead => lead.createdAt > last24Hours);
+
+    console.log(`🔍 DEBUG: User ${req.user.userId} has ${allLeads.length} total leads, ${recentLeads.length} from last 24h`);
 
     res.json({
-      totalLeads: leadCount,
-      recentLeads: recentLeads.map(lead => ({
+      totalLeads: allLeads.length,
+      recentLeads: recentLeads.slice(0, 20).map(lead => ({
         id: lead.id,
         title: lead.title,
         url: lead.url,
         createdAt: lead.createdAt,
         confidence: lead.confidence,
-        company: lead.company
-      }))
+        company: lead.company,
+        description: lead.description?.substring(0, 100) + '...'
+      })),
+      allRecentTitles: recentLeads.map(lead => lead.title)
     });
   } catch (error) {
     console.error('Error fetching debug leads:', error);

@@ -55,7 +55,10 @@ class AdvancedScrapingService {
 
     // Update progress if jobId provided
     if (this.updateProgress && jobId) {
+      console.log(`📊 UPDATING PROGRESS: ${jobId} - scraping - 0/6 - Starting advanced web scraping...`);
       this.updateProgress(jobId, 'scraping', 0, 6, 'Starting advanced web scraping...');
+    } else {
+      console.log(`⚠️ No progress callback available for jobId: ${jobId}`);
     }
 
     const keywords = config.keywords || ['hotel', 'development', 'construction'];
@@ -64,11 +67,21 @@ class AdvancedScrapingService {
     const allResults = [];
 
     try {
+      // Update progress - starting API searches
+      if (this.updateProgress && jobId) {
+        this.updateProgress(jobId, 'scraping', 1, 6, 'Searching NewsAPI for verified articles...');
+      }
+
       // 1. NewsAPI - Premium verified articles
       if (this.apis.newsapi.enabled) {
         console.log('📰 Searching NewsAPI for verified articles...');
         const newsApiResults = await this.searchNewsAPI(keywords, maxResults);
         allResults.push(...newsApiResults);
+
+        // Update progress after NewsAPI
+        if (this.updateProgress && jobId) {
+          this.updateProgress(jobId, 'scraping', 2, 6, `NewsAPI found ${newsApiResults.length} articles. Searching Google...`);
+        }
       }
 
       // 2. Google News API - Direct article links
@@ -76,6 +89,11 @@ class AdvancedScrapingService {
         console.log('🔍 Searching Google News API...');
         const googleResults = await this.searchGoogleNewsAPI(keywords, maxResults);
         allResults.push(...googleResults);
+
+        // Update progress after Google
+        if (this.updateProgress && jobId) {
+          this.updateProgress(jobId, 'scraping', 3, 6, `Google found ${googleResults.length} articles. Searching Bing...`);
+        }
       }
 
       // 3. Bing News API - Comprehensive coverage
@@ -83,6 +101,11 @@ class AdvancedScrapingService {
         console.log('📰 Searching Bing News API...');
         const bingResults = await this.searchBingNewsAPI(keywords, maxResults);
         allResults.push(...bingResults);
+
+        // Update progress after Bing
+        if (this.updateProgress && jobId) {
+          this.updateProgress(jobId, 'scraping', 4, 6, `Bing found ${bingResults.length} articles. Starting web scraping...`);
+        }
       }
 
       // 4. Advanced Web Scraping - Business publications
@@ -90,10 +113,20 @@ class AdvancedScrapingService {
       const webScrapeResults = await this.advancedWebScraping(keywords, maxResults);
       allResults.push(...webScrapeResults);
 
+      // Update progress after web scraping
+      if (this.updateProgress && jobId) {
+        this.updateProgress(jobId, 'scraping', 5, 6, `Web scraping found ${webScrapeResults.length} articles. Checking industry sources...`);
+      }
+
       // 5. Industry-specific sources
       console.log('🏭 Searching industry-specific sources...');
       const industryResults = await this.searchIndustrySources(keywords, maxResults);
       allResults.push(...industryResults);
+
+      // Update progress after industry sources
+      if (this.updateProgress && jobId) {
+        this.updateProgress(jobId, 'scraping', 6, 6, `Industry sources found ${industryResults.length} articles. Processing results...`);
+      }
 
       // Deduplicate and validate URLs
       const uniqueResults = this.deduplicateAndValidate(allResults);
