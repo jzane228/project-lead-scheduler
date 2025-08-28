@@ -3192,7 +3192,7 @@ class EnhancedScrapingService {
                   }
                 });
               }
-              return;
+              // Continue with lead saving instead of returning early
             }
 
             if (Contact && Contact.bulkCreateFromExtraction) {

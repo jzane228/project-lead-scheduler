@@ -717,31 +717,58 @@ class AdvancedScrapingService {
           source: result.source,
           publishedDate: result.publishedDate,
           snippet: result.snippet,
-          verified: result.verified || false
+          verified: result.verified || false,
+          // Create extractedData structure that saveLeads method expects
+          extractedData: {}
         };
 
         // Extract company name
-        leadData.company = this.dataExtractionService.extractCompanyFromText(result.title + ' ' + result.snippet);
+        const company = this.dataExtractionService.extractCompanyFromText(result.title + ' ' + result.snippet);
+        leadData.extractedData.company = company;
+        leadData.company = company;
 
         // Extract location
-        leadData.location = this.dataExtractionService.extractLocationFromText(result.title + ' ' + result.snippet);
+        const location = this.dataExtractionService.extractLocationFromText(result.title + ' ' + result.snippet);
+        leadData.extractedData.location = location;
+        leadData.location = location;
 
         // Extract project type
-        leadData.projectType = this.dataExtractionService.extractProjectTypeFromText(result.title + ' ' + result.snippet);
+        const projectType = this.dataExtractionService.extractProjectTypeFromText(result.title + ' ' + result.snippet);
+        leadData.extractedData.projectType = projectType;
+        leadData.projectType = projectType;
 
         // Extract budget if available
-        leadData.budget = this.dataExtractionService.extractBudgetFromText(result.title + ' ' + result.snippet);
+        const budget = this.dataExtractionService.extractBudgetFromText(result.title + ' ' + result.snippet);
+        leadData.extractedData.budget = budget;
+        leadData.budget = budget;
 
         // Extract room count for hotels
-        if (leadData.projectType?.toLowerCase().includes('hotel')) {
-          leadData.roomCount = this.dataExtractionService.extractRoomCountFromText(result.title + ' ' + result.snippet);
+        if (projectType?.toLowerCase().includes('hotel')) {
+          const roomCount = this.dataExtractionService.extractRoomCountFromText(result.title + ' ' + result.snippet);
+          leadData.extractedData.roomCount = roomCount;
+          leadData.roomCount = roomCount;
+        }
+
+        // Extract contacts
+        const contacts = this.dataExtractionService.extractContactsFromText(result.title + ' ' + result.snippet);
+        if (contacts.length > 0) {
+          leadData.extractedData.contactInfo = contacts[0]; // Primary contact
         }
 
         // Generate comprehensive description
         leadData.description = this.generateDescription(leadData);
+        leadData.extractedData.description = leadData.description;
 
         // Set confidence based on data completeness
         leadData.confidence = this.calculateConfidence(leadData);
+        leadData.extractedData.confidence = leadData.confidence;
+
+        // Add additional fields that saveLeads expects
+        leadData.extractedData.aiUsed = false;
+        leadData.extractedData.keywords = [];
+        leadData.extractedData.notes = `Scraped from ${result.source} using advanced scraping system`;
+        leadData.articleText = result.snippet || result.title;
+        leadData.extractedAt = new Date();
 
         processedResults.push(leadData);
 
