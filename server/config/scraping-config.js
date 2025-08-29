@@ -8,17 +8,17 @@ module.exports = {
   // Premium API Configuration
   apis: {
     newsapi: {
-      enabled: true, // ✅ ENABLED with your key
-      key: 'c46eb3eb018b4cd5aedf3346fe6a5898',
+      enabled: process.env.NEWS_API_KEY ? true : false,
+      key: process.env.NEWS_API_KEY || 'c46eb3eb018b4cd5aedf3346fe6a5898',
       baseUrl: 'https://newsapi.org/v2',
       rateLimit: 100, // requests per day
       timeout: 10000
     },
 
     googleNews: {
-      enabled: true, // ✅ ENABLED with your keys
-      key: 'AIzaSyDNqFmlNRMUVPTvoW1CnxIe2YWOxN9f9GE',
-      searchEngineId: '85ac3269e22bb48d2',
+      enabled: process.env.GOOGLE_API_KEY ? true : false,
+      key: process.env.GOOGLE_API_KEY || 'AIzaSyDNqFmlNRMUVPTvoW1CnxIe2YWOxN9f9GE',
+      searchEngineId: process.env.GOOGLE_SEARCH_ENGINE_ID || '85ac3269e22bb48d2',
       baseUrl: 'https://www.googleapis.com/customsearch/v1',
       rateLimit: 100, // Google Custom Search has lower limits
       timeout: 10000
