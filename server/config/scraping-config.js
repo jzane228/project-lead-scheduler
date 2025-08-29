@@ -8,17 +8,17 @@ module.exports = {
   // Premium API Configuration
   apis: {
     newsapi: {
-      enabled: process.env.NEWS_API_KEY ? true : false,
-      key: process.env.NEWS_API_KEY,
+      enabled: true, // ✅ ENABLED with your key
+      key: 'c46eb3eb018b4cd5aedf3346fe6a5898',
       baseUrl: 'https://newsapi.org/v2',
       rateLimit: 100, // requests per day
       timeout: 10000
     },
 
     googleNews: {
-      enabled: process.env.GOOGLE_API_KEY ? true : false,
-      key: process.env.GOOGLE_API_KEY,
-      searchEngineId: process.env.GOOGLE_SEARCH_ENGINE_ID || '017576662512468239146:omuauf_lfve',
+      enabled: true, // ✅ ENABLED with your keys
+      key: 'AIzaSyDNqFmlNRMUVPTvoW1CnxIe2YWOxN9f9GE',
+      searchEngineId: '85ac3269e22bb48d2',
       baseUrl: 'https://www.googleapis.com/customsearch/v1',
       rateLimit: 100, // Google Custom Search has lower limits
       timeout: 10000
@@ -39,6 +39,99 @@ module.exports = {
       model: 'deepseek-chat',
       maxTokens: 4000,
       temperature: 0.3
+    },
+
+    // 🔥 HIGHLY RECOMMENDED ADDITIONAL APIs FOR HOTEL/CONSTRUCTION LEADS:
+
+    crunchbase: {
+      enabled: process.env.CRUNCHBASE_API_KEY ? true : false,
+      key: process.env.CRUNCHBASE_API_KEY,
+      baseUrl: 'https://api.crunchbase.com/v3.1',
+      rateLimit: 600, // requests per hour
+      timeout: 15000,
+      description: 'Company data, funding, acquisitions - perfect for construction/hotel companies'
+    },
+
+    businessWire: {
+      enabled: process.env.BUSINESS_WIRE_API_KEY ? true : false,
+      key: process.env.BUSINESS_WIRE_API_KEY,
+      baseUrl: 'https://api.businesswire.com/v3.0',
+      rateLimit: 1000,
+      timeout: 10000,
+      description: 'Press releases from companies - great for project announcements'
+    },
+
+    prNewswire: {
+      enabled: process.env.PRN_API_KEY ? true : false,
+      key: process.env.PRN_API_KEY,
+      baseUrl: 'https://api.prnewswire.com/v1',
+      rateLimit: 1000,
+      timeout: 10000,
+      description: 'Corporate press releases and announcements'
+    },
+
+    secEdgar: {
+      enabled: process.env.SEC_API_KEY ? true : false,
+      key: process.env.SEC_API_KEY,
+      baseUrl: 'https://api.sec-api.io',
+      rateLimit: 1000,
+      timeout: 15000,
+      description: 'SEC filings, mergers, acquisitions - crucial for construction companies'
+    },
+
+    angelList: {
+      enabled: process.env.ANGEL_LIST_API_KEY ? true : false,
+      key: process.env.ANGEL_LIST_API_KEY,
+      baseUrl: 'https://api.angel.co/v2',
+      rateLimit: 1000,
+      timeout: 10000,
+      description: 'Startup data, funding rounds, company profiles'
+    },
+
+    yelp: {
+      enabled: process.env.YELP_API_KEY ? true : false,
+      key: process.env.YELP_API_KEY,
+      baseUrl: 'https://api.yelp.com/v3',
+      rateLimit: 5000, // requests per day
+      timeout: 8000,
+      description: 'Business listings, reviews, contact info for hospitality businesses'
+    },
+
+    twitter: {
+      enabled: process.env.TWITTER_BEARER_TOKEN ? true : false,
+      bearerToken: process.env.TWITTER_BEARER_TOKEN,
+      baseUrl: 'https://api.twitter.com/2',
+      rateLimit: 300, // requests per 15 minutes
+      timeout: 10000,
+      description: 'Real-time news, announcements, industry discussions'
+    },
+
+    reddit: {
+      enabled: process.env.REDDIT_CLIENT_ID ? true : false,
+      clientId: process.env.REDDIT_CLIENT_ID,
+      clientSecret: process.env.REDDIT_CLIENT_SECRET,
+      baseUrl: 'https://www.reddit.com/api/v1',
+      rateLimit: 600, // requests per minute
+      timeout: 10000,
+      description: 'Industry discussions, real estate, construction subreddits'
+    },
+
+    linkedin: {
+      enabled: process.env.LINKEDIN_ACCESS_TOKEN ? true : false,
+      accessToken: process.env.LINKEDIN_ACCESS_TOKEN,
+      baseUrl: 'https://api.linkedin.com/v2',
+      rateLimit: 100, // requests per day for basic tier
+      timeout: 15000,
+      description: 'Professional contacts, company updates, industry networking'
+    },
+
+    foursquare: {
+      enabled: process.env.FOURSQUARE_API_KEY ? true : false,
+      key: process.env.FOURSQUARE_API_KEY,
+      baseUrl: 'https://api.foursquare.com/v3',
+      rateLimit: 950, // requests per hour
+      timeout: 8000,
+      description: 'Venue data, business locations, hospitality establishments'
     }
   },
 

@@ -352,7 +352,58 @@ class EnhancedScrapingService {
         console.warn('⚠️ Web scraping failed:', error.message);
       }
 
-      // 5. Industry-specific sources
+      // 5. Premium Business APIs - HIGH VALUE SOURCES
+      console.log('💎 Searching premium business APIs...');
+
+      // Crunchbase - Company data and funding
+      if (this.apis?.crunchbase?.enabled) {
+        try {
+          const crunchbaseResults = await this.searchCrunchbaseAPI(keywords, Math.floor(maxResults/2));
+          allResults.push(...crunchbaseResults);
+          console.log(`✅ Crunchbase: ${crunchbaseResults.length} results`);
+        } catch (error) {
+          console.warn('⚠️ Crunchbase failed:', error.message);
+        }
+      }
+
+      // Business Wire - Press releases
+      if (this.apis?.businessWire?.enabled) {
+        try {
+          const businessWireResults = await this.searchBusinessWireAPI(keywords, Math.floor(maxResults/2));
+          allResults.push(...businessWireResults);
+          console.log(`✅ Business Wire: ${businessWireResults.length} results`);
+        } catch (error) {
+          console.warn('⚠️ Business Wire failed:', error.message);
+        }
+      }
+
+      // SEC EDGAR - Corporate filings
+      if (this.apis?.secEdgar?.enabled) {
+        try {
+          const secResults = await this.searchSECEdgarAPI(keywords, Math.floor(maxResults/2));
+          allResults.push(...secResults);
+          console.log(`✅ SEC EDGAR: ${secResults.length} results`);
+        } catch (error) {
+          console.warn('⚠️ SEC EDGAR failed:', error.message);
+        }
+      }
+
+      // Yelp - Business listings
+      if (this.apis?.yelp?.enabled) {
+        try {
+          const yelpResults = await this.searchYelpAPI(keywords, Math.floor(maxResults/3));
+          allResults.push(...yelpResults);
+          console.log(`✅ Yelp: ${yelpResults.length} results`);
+        } catch (error) {
+          console.warn('⚠️ Yelp failed:', error.message);
+        }
+      }
+
+      if (this.updateProgress && finalJobId) {
+        this.updateProgress(finalJobId, 'scraping', 5, 6, `Premium APIs found ${allResults.length} total articles. Checking industry sources...`);
+      }
+
+      // 6. Industry-specific sources
       console.log('🏭 Searching industry-specific sources...');
       try {
         const industryResults = await this.searchIndustrySources(keywords, maxResults);
@@ -360,7 +411,7 @@ class EnhancedScrapingService {
         console.log(`✅ Industry sources: ${industryResults.length} results`);
 
         if (this.updateProgress && finalJobId) {
-          this.updateProgress(finalJobId, 'scraping', 5, 6, `Industry sources found ${industryResults.length} articles. Processing results...`);
+          this.updateProgress(finalJobId, 'scraping', 6, 6, `Industry sources found ${industryResults.length} articles. Processing results...`);
         }
       } catch (error) {
         console.warn('⚠️ Industry sources failed:', error.message);
@@ -3995,6 +4046,306 @@ class EnhancedScrapingService {
     }
 
     return links;
+  }
+
+  // 🔥 PREMIUM API IMPLEMENTATIONS FOR ENHANCED LEAD GENERATION
+
+  async searchCrunchbaseAPI(keywords, maxResults = 20) {
+    if (!this.apis?.crunchbase?.enabled) return [];
+
+    const results = [];
+    const searchQuery = keywords.join(' ');
+
+    try {
+      console.log('🏢 Searching Crunchbase for company data...');
+
+      // Search for companies related to keywords
+      const response = await axios.get(`${this.apis.crunchbase.baseUrl}/organizations`, {
+        params: {
+          query: searchQuery,
+          field_ids: 'name,short_description,homepage_url,linkedin_url,funding_total',
+          limit: Math.min(maxResults, 20)
+        },
+        headers: {
+          'X-cb-user-key': this.apis.crunchbase.key
+        },
+        timeout: this.apis.crunchbase.timeout || 15000
+      });
+
+      for (const org of response.data?.data || []) {
+        const properties = org.properties || {};
+
+        if (this.isRelevantOrganization(properties, keywords)) {
+          results.push({
+            title: `${properties.name} - Company Profile`,
+            url: properties.homepage_url || `https://crunchbase.com/organization/${org.uuid}`,
+            snippet: properties.short_description || `Company profile for ${properties.name}`,
+            source: 'Crunchbase',
+            publishedDate: new Date(),
+            author: null,
+            verified: true,
+            apiSource: 'Crunchbase',
+            companyData: {
+              name: properties.name,
+              linkedin: properties.linkedin_url,
+              funding: properties.funding_total,
+              description: properties.short_description
+            },
+            relevance: this.calculateCompanyRelevance(properties, keywords)
+          });
+        }
+      }
+
+      console.log(`✅ Crunchbase found ${results.length} relevant companies`);
+      return results;
+
+    } catch (error) {
+      console.warn('⚠️ Crunchbase search failed:', error.message);
+      return [];
+    }
+  }
+
+  async searchBusinessWireAPI(keywords, maxResults = 20) {
+    if (!this.apis?.businessWire?.enabled) return [];
+
+    const results = [];
+    const searchQuery = keywords.join(' ');
+
+    try {
+      console.log('📢 Searching Business Wire for press releases...');
+
+      const response = await axios.get(`${this.apis.businessWire.baseUrl}/search`, {
+        params: {
+          q: searchQuery,
+          limit: Math.min(maxResults, 20),
+          sort: 'date'
+        },
+        headers: {
+          'Authorization': `Bearer ${this.apis.businessWire.key}`
+        },
+        timeout: this.apis.businessWire.timeout || 10000
+      });
+
+      for (const release of response.data?.releases || []) {
+        if (this.isRelevantPressRelease(release, keywords)) {
+          results.push({
+            title: release.headline,
+            url: release.url,
+            snippet: release.subheadline || release.summary,
+            source: 'Business Wire',
+            publishedDate: new Date(release.publish_date),
+            author: release.author,
+            verified: true,
+            apiSource: 'Business Wire',
+            pressReleaseData: {
+              company: release.company_name,
+              industry: release.industry,
+              location: release.location
+            },
+            relevance: this.calculatePressReleaseRelevance(release, keywords)
+          });
+        }
+      }
+
+      console.log(`✅ Business Wire found ${results.length} press releases`);
+      return results;
+
+    } catch (error) {
+      console.warn('⚠️ Business Wire search failed:', error.message);
+      return [];
+    }
+  }
+
+  async searchSECEdgarAPI(keywords, maxResults = 20) {
+    if (!this.apis?.secEdgar?.enabled) return [];
+
+    const results = [];
+    const searchQuery = keywords.join(' ');
+
+    try {
+      console.log('📊 Searching SEC EDGAR for corporate filings...');
+
+      const response = await axios.get(`${this.apis.secEdgar.baseUrl}/press-releases`, {
+        params: {
+          query: searchQuery,
+          limit: Math.min(maxResults, 20),
+          from: '0'
+        },
+        headers: {
+          'Authorization': `Token ${this.apis.secEdgar.key}`
+        },
+        timeout: this.apis.secEdgar.timeout || 15000
+      });
+
+      for (const filing of response.data?.filings || []) {
+        if (this.isRelevantFiling(filing, keywords)) {
+          results.push({
+            title: filing.title || `SEC Filing: ${filing.form_type}`,
+            url: filing.linkToFilingDetails || filing.linkToHtml,
+            snippet: filing.primaryDocument || `Corporate filing from ${filing.company_name}`,
+            source: 'SEC EDGAR',
+            publishedDate: new Date(filing.filing_date),
+            author: null,
+            verified: true,
+            apiSource: 'SEC EDGAR',
+            filingData: {
+              company: filing.company_name,
+              cik: filing.cik,
+              formType: filing.form_type,
+              period: filing.period_of_report
+            },
+            relevance: this.calculateFilingRelevance(filing, keywords)
+          });
+        }
+      }
+
+      console.log(`✅ SEC EDGAR found ${results.length} corporate filings`);
+      return results;
+
+    } catch (error) {
+      console.warn('⚠️ SEC EDGAR search failed:', error.message);
+      return [];
+    }
+  }
+
+  async searchYelpAPI(keywords, maxResults = 20) {
+    if (!this.apis?.yelp?.enabled) return [];
+
+    const results = [];
+    const searchQuery = keywords.join(' ');
+
+    try {
+      console.log('🍽️ Searching Yelp for hospitality businesses...');
+
+      const response = await axios.get(`${this.apis.yelp.baseUrl}/businesses/search`, {
+        params: {
+          term: searchQuery,
+          categories: 'hotels,resorts,restaurants,realestate',
+          limit: Math.min(maxResults, 20),
+          sort_by: 'rating'
+        },
+        headers: {
+          'Authorization': `Bearer ${this.apis.yelp.key}`
+        },
+        timeout: this.apis.yelp.timeout || 8000
+      });
+
+      for (const business of response.data?.businesses || []) {
+        if (this.isRelevantBusiness(business, keywords)) {
+          results.push({
+            title: `${business.name} - ${business.categories?.map(c => c.title).join(', ')}`,
+            url: business.url,
+            snippet: `${business.rating} ⭐ (${business.review_count} reviews) - ${business.location?.display_address?.join(', ')}`,
+            source: 'Yelp',
+            publishedDate: new Date(),
+            verified: true,
+            apiSource: 'Yelp',
+            businessData: {
+              name: business.name,
+              rating: business.rating,
+              reviewCount: business.review_count,
+              phone: business.display_phone,
+              address: business.location?.display_address,
+              categories: business.categories
+            },
+            relevance: this.calculateBusinessRelevance(business, keywords)
+          });
+        }
+      }
+
+      console.log(`✅ Yelp found ${results.length} hospitality businesses`);
+      return results;
+
+    } catch (error) {
+      console.warn('⚠️ Yelp search failed:', error.message);
+      return [];
+    }
+  }
+
+  // UTILITY METHODS FOR NEW APIs
+
+  isRelevantOrganization(org, keywords) {
+    const text = `${org.name || ''} ${org.short_description || ''}`.toLowerCase();
+    const keywordMatches = keywords.filter(keyword =>
+      text.includes(keyword.toLowerCase())
+    );
+    return keywordMatches.length > 0;
+  }
+
+  isRelevantPressRelease(release, keywords) {
+    const text = `${release.headline || ''} ${release.subheadline || ''} ${release.summary || ''}`.toLowerCase();
+    const keywordMatches = keywords.filter(keyword =>
+      text.includes(keyword.toLowerCase())
+    );
+    return keywordMatches.length > 0;
+  }
+
+  isRelevantFiling(filing, keywords) {
+    const text = `${filing.title || ''} ${filing.primaryDocument || ''} ${filing.company_name || ''}`.toLowerCase();
+    const keywordMatches = keywords.filter(keyword =>
+      text.includes(keyword.toLowerCase())
+    );
+    return keywordMatches.length > 0;
+  }
+
+  isRelevantBusiness(business, keywords) {
+    const text = `${business.name || ''} ${business.categories?.map(c => c.title).join(' ') || ''}`.toLowerCase();
+    const keywordMatches = keywords.filter(keyword =>
+      text.includes(keyword.toLowerCase())
+    );
+    return keywordMatches.length > 0;
+  }
+
+  calculateCompanyRelevance(org, keywords) {
+    const text = `${org.name || ''} ${org.short_description || ''}`.toLowerCase();
+    let score = 0;
+
+    keywords.forEach(keyword => {
+      if (text.includes(keyword.toLowerCase())) {
+        score += 20; // Higher weight for company data
+      }
+    });
+
+    return Math.min(score, 100);
+  }
+
+  calculatePressReleaseRelevance(release, keywords) {
+    const text = `${release.headline || ''} ${release.subheadline || ''}`.toLowerCase();
+    let score = 0;
+
+    keywords.forEach(keyword => {
+      if (text.includes(keyword.toLowerCase())) {
+        score += 25; // Press releases are very valuable
+      }
+    });
+
+    return Math.min(score, 100);
+  }
+
+  calculateFilingRelevance(filing, keywords) {
+    const text = `${filing.title || ''} ${filing.company_name || ''}`.toLowerCase();
+    let score = 0;
+
+    keywords.forEach(keyword => {
+      if (text.includes(keyword.toLowerCase())) {
+        score += 30; // SEC filings are extremely valuable
+      }
+    });
+
+    return Math.min(score, 100);
+  }
+
+  calculateBusinessRelevance(business, keywords) {
+    const text = `${business.name || ''} ${business.categories?.map(c => c.title).join(' ') || ''}`.toLowerCase();
+    let score = 0;
+
+    keywords.forEach(keyword => {
+      if (text.includes(keyword.toLowerCase())) {
+        score += 15; // Business data is moderately valuable
+      }
+    });
+
+    return Math.min(score, 100);
   }
 
   // MOCK DATA GENERATION FOR TESTING (LAST RESORT ONLY)
