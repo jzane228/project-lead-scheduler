@@ -276,8 +276,11 @@ class EnhancedScrapingService {
       console.log('✅ Database tables ready');
 
       // COMPREHENSIVE MULTI-ENGINE SEARCH (RESTORED WORKING SYSTEM)
+      const keywords = config.keywords || ['hotel', 'development', 'construction'];
       const maxResults = config.max_results_per_run || 50;
       const allResults = [];
+
+      console.log(`🔍 Keywords: ${keywords.join(', ')}`);
 
       // Initialize progress
       if (this.updateProgress && finalJobId) {
@@ -758,42 +761,7 @@ class EnhancedScrapingService {
     }
   }
 
-  async scrapeGoogleNews(keywords, maxResults = 20) {
-    try {
-      const searchQuery = keywords.join(' ');
-      const searchUrl = `https://news.google.com/search?q=${encodeURIComponent(searchQuery)}&hl=en-US&gl=US&ceid=US:en`;
-      
-      const content = await this.scrapyService.scrapeWithScrapy(searchUrl, { renderJs: false });
-      
-      // Parse Google News results
-      const $ = require('cheerio').load(content.html);
-      const articles = [];
-      
-      $('article, .MQsxIb').each((i, elem) => {
-        if (articles.length >= maxResults) return false;
-        
-        const $elem = $(elem);
-        const title = $elem.find('h3, h4, a').text().trim();
-        const link = $elem.find('a[href*="/articles/"]').attr('href');
-        
-        if (title && link) {
-          const absoluteUrl = 'https://news.google.com' + link;
-          articles.push({
-            title,
-            url: absoluteUrl,
-            source: 'Google News',
-            snippet: title,
-            publishedDate: new Date()
-          });
-        }
-      });
-      
-      return articles;
-    } catch (error) {
-      console.error('❌ Google News scraping failed:', error);
-      return [];
-    }
-  }
+
 
   async scrapeBingNews(keywords, maxResults = 20) {
     try {
@@ -2176,70 +2144,7 @@ class EnhancedScrapingService {
     return results;
   }
 
-  async searchIndustrySources(engine, keywords, maxResults = 10) {
-    const results = [];
-    const searchTerm = keywords.join(' ');
 
-    console.log(`🏨 Searching ${engine.sources.length} hospitality sources...`);
-
-    for (const source of engine.sources) {
-      if (results.length >= maxResults) break;
-
-      try {
-        const url = source.searchUrl.replace('{keywords}', encodeURIComponent(searchTerm));
-
-        const response = await axios.get(url, {
-          headers: {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8'
-          },
-          timeout: 8000,
-          responseType: 'text'
-        });
-
-        const $ = require('cheerio').load(response.data);
-        let sourceResults = 0;
-
-        // Find hospitality industry articles
-        $('article a, .post a, .news-item a, h2 a, .title a').each((i, elem) => {
-          if (sourceResults >= 5 || results.length >= maxResults) return false;
-
-          const $link = $(elem);
-          const title = $link.text().trim() || $link.attr('title') || '';
-          let articleUrl = $link.attr('href');
-
-          if (articleUrl && title && title.length > 5) {
-            if (!articleUrl.startsWith('http')) {
-              const baseUrl = new URL(url);
-              articleUrl = baseUrl.origin + (articleUrl.startsWith('/') ? '' : '/') + articleUrl;
-            }
-
-            if (this.isValidArticleUrl(articleUrl)) {
-              results.push({
-                title: title.substring(0, 100),
-                url: articleUrl,
-                snippet: title.substring(0, 200),
-                source: source.name,
-                publishedDate: new Date(),
-                engine: engine.name,
-                urlVerified: true
-              });
-              sourceResults++;
-            }
-          }
-        });
-
-        console.log(`✅ ${source.name} contributed ${sourceResults} articles`);
-
-      } catch (error) {
-        console.warn(`⚠️ ${source.name} search failed:`, error.message);
-        continue;
-      }
-    }
-
-    console.log(`✅ ${engine.name} found ${results.length} articles`);
-    return results;
-  }
 
   async searchWorkingSources(engine, keywords, maxResults = 10) {
     const results = [];
