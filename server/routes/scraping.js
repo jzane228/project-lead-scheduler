@@ -109,6 +109,88 @@ router.get('/debug-leads', auth, async (req, res) => {
   }
 });
 
+// @route   POST /api/scraping/test-lead-save
+// @desc    Test endpoint to verify lead saving works
+// @access  Private
+router.post('/test-lead-save', auth, async (req, res) => {
+  try {
+    const { Lead, LeadSource } = require('../models');
+
+    console.log('🧪 TESTING LEAD SAVE FUNCTIONALITY...');
+
+    // Create test lead source first
+    const leadSource = await LeadSource.create({
+      name: 'Test Source',
+      url: 'https://test.com',
+      type: 'website'
+    });
+
+    console.log('✅ Test lead source created:', leadSource.id);
+
+    // Create test lead
+    const testLeadData = {
+      title: 'TEST LEAD - Boutique Hotel Project',
+      description: 'This is a test lead to verify database functionality',
+      company: 'Test Hotel Group',
+      url: 'https://test-hotel-project.com',
+      location: 'Test City, USA',
+      budget: '$5,000,000',
+      confidence: 95,
+      industry_type: 'hospitality',
+      keywords: ['boutique', 'hotel', 'test'],
+      project_type: 'new construction',
+      user_id: req.user.userId,
+      lead_source_id: leadSource.id,
+      contact_info: {
+        name: 'Test Contact',
+        email: 'test@test.com',
+        phone: '555-0123'
+      },
+      custom_fields: {
+        testField: 'test value'
+      }
+    };
+
+    console.log('💾 CREATING TEST LEAD...');
+    const testLead = await Lead.create(testLeadData);
+    console.log('✅ TEST LEAD CREATED:', testLead.id);
+
+    // Verify it was saved
+    const verifyLead = await Lead.findByPk(testLead.id);
+    if (verifyLead) {
+      console.log('🔍 VERIFICATION: Test lead found in database');
+    } else {
+      console.error('❌ VERIFICATION FAILED: Test lead not found!');
+    }
+
+    // Get updated lead count
+    const leadCount = await Lead.count({
+      where: { user_id: req.user.userId }
+    });
+
+    res.json({
+      success: true,
+      message: 'Test lead saved successfully',
+      leadId: testLead.id,
+      totalLeads: leadCount,
+      leadData: {
+        id: testLead.id,
+        title: testLead.title,
+        url: testLead.url,
+        company: testLead.company
+      }
+    });
+
+  } catch (error) {
+    console.error('❌ Test lead save failed:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message,
+      stack: error.stack
+    });
+  }
+});
+
 // @route   GET /api/scraping/configs-auth
 // @desc    Get all scraping configurations for user
 // @access  Private

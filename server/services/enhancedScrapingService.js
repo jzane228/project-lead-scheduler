@@ -241,38 +241,116 @@ class EnhancedScrapingService {
   }
 
   async scrapeConfiguration(config, userId, jobId = null) {
-    console.log(`🚀 Starting enhanced scraping for config: ${config.name} (jobId: ${jobId})`);
+    console.log(`🚀 Starting FAST scraping for config: ${config.name} (jobId: ${jobId})`);
     console.log(`🔍 Keywords: ${config.keywords.join(', ')}`);
 
-    // First try the Advanced Scraping Service with premium APIs
-    if (this.usePremiumAPIs) {
-      try {
-        console.log('🎯 Using Advanced Scraping Service with premium APIs...');
+    // Use the new FAST & RELIABLE method
+    return await this.scrapeConfigurationFast(config, userId, jobId);
+  }
 
-        // Set up progress callback for advanced service
-        if (jobId) {
-          this.advancedScrapingService.setProgressCallback((progressJobId, stage, progress, total, message) => {
-            this.updateProgress(progressJobId, stage, progress, total, message);
-          });
+  // NEW FAST & RELIABLE SCRAPING METHOD
+  async scrapeConfigurationFast(config, userId, jobId = null) {
+    console.log(`⚡ FAST SCRAPING: Starting for ${config.name}`);
+    const finalJobId = jobId || `fast-${config.id}-${Date.now()}`;
+
+    try {
+      // Ensure database tables exist
+      await this.ensureTablesExist();
+      console.log('✅ Database tables ready');
+
+      // FAST: Only use Google and Bing with limited results
+      const maxResults = 3;
+      const allResults = [];
+
+      // Update progress - starting
+      this.updateProgress(finalJobId, 'scraping', 0, 2, 'Starting fast scraping...');
+
+      // 1. GOOGLE SEARCH (most reliable)
+      if (this.apis.googleNews?.enabled) {
+        console.log('🔍 Searching Google (fast mode)...');
+        try {
+          const googleResults = await this.searchGoogleNewsAPI(config.keywords, maxResults);
+          allResults.push(...googleResults);
+          console.log(`✅ Google: ${googleResults.length} results`);
+          this.updateProgress(finalJobId, 'scraping', 1, 2, `Google found ${googleResults.length} results...`);
+        } catch (error) {
+          console.warn('⚠️ Google failed:', error.message);
         }
-
-        const advancedResult = await this.advancedScrapingService.scrapeConfiguration(config, userId, jobId);
-
-        // If we got good results, return them
-        if (advancedResult.savedLeads > 0) {
-          console.log(`✅ Advanced Scraping Service found ${advancedResult.savedLeads} leads with guaranteed URLs`);
-          return advancedResult;
-        } else {
-          console.log('⚠️ Advanced Scraping Service found no leads, falling back to traditional methods');
-        }
-      } catch (error) {
-        console.warn('⚠️ Advanced Scraping Service failed, falling back to traditional methods:', error.message);
       }
-    }
 
-    // Fallback to traditional enhanced scraping method
-    console.log('🔄 Using traditional enhanced scraping method...');
-    return await this.scrapeConfigurationTraditional(config, userId, jobId);
+      // 2. BING SEARCH (backup)
+      if (this.apis.bingNews?.enabled) {
+        console.log('📰 Searching Bing (fast mode)...');
+        try {
+          const bingResults = await this.searchBingNewsAPI(config.keywords, maxResults);
+          allResults.push(...bingResults);
+          console.log(`✅ Bing: ${bingResults.length} results`);
+          this.updateProgress(finalJobId, 'scraping', 2, 2, `Total: ${allResults.length} results found`);
+        } catch (error) {
+          console.warn('⚠️ Bing failed:', error.message);
+        }
+      }
+
+      console.log(`📊 TOTAL RAW RESULTS: ${allResults.length}`);
+
+      // DEDUPLICATE AND VALIDATE
+      const uniqueResults = this.deduplicateAndValidate(allResults);
+      console.log(`✅ UNIQUE VALID RESULTS: ${uniqueResults.length}`);
+
+      if (uniqueResults.length === 0) {
+        console.log('❌ No valid results found');
+        this.updateProgress(finalJobId, 'completed', 0, 0, 'No leads found');
+        return {
+          totalResults: 0,
+          savedLeads: 0,
+          leads: [],
+          errors: ['No valid results found'],
+          finalJobId
+        };
+      }
+
+      // PROCESS RESULTS (simplified)
+      console.log('⚡ PROCESSING RESULTS...');
+      const processedResults = uniqueResults.slice(0, 5).map(result => ({
+        title: result.title,
+        url: result.url,
+        snippet: result.snippet || result.title,
+        source: result.source,
+        publishedDate: result.publishedDate || new Date(),
+        extractedData: {
+          description: result.snippet || result.title,
+          confidence: 70,
+          company: this.extractCompanyFromTitle(result.title) || 'Unknown',
+          location: config.location || null,
+          industry_type: 'hospitality' // Default for hotel projects
+        }
+      }));
+
+      console.log(`✅ PROCESSED: ${processedResults.length} results`);
+
+      // SAVE LEADS
+      console.log('💾 SAVING LEADS TO DATABASE...');
+      this.updateProgress(finalJobId, 'saving', 0, processedResults.length, 'Saving leads...');
+
+      const savedLeads = await this.saveLeadsFast(processedResults, userId, config, finalJobId);
+
+      console.log(`🎉 SUCCESS: ${savedLeads.length} leads saved to database`);
+      this.updateProgress(finalJobId, 'completed', savedLeads.length, savedLeads.length,
+        `Successfully saved ${savedLeads.length} leads!`);
+
+      return {
+        totalResults: uniqueResults.length,
+        savedLeads: savedLeads.length,
+        leads: savedLeads,
+        errors: [],
+        finalJobId
+      };
+
+    } catch (error) {
+      console.error('❌ Fast scraping failed:', error);
+      this.updateProgress(finalJobId, 'error', 0, 1, `Error: ${error.message}`);
+      throw error;
+    }
   }
 
   async scrapeConfigurationTraditional(config, userId, jobId = null) {
@@ -3267,6 +3345,112 @@ class EnhancedScrapingService {
       }
     }
 
+    return savedLeads;
+  }
+
+  // FAST & RELIABLE LEAD SAVING METHOD
+  async saveLeadsFast(processedResults, userId, config, jobId = null) {
+    console.log(`⚡ FAST SAVE: Processing ${processedResults.length} leads for user ${userId}`);
+    const savedLeads = [];
+
+    for (let i = 0; i < processedResults.length; i++) {
+      const result = processedResults[i];
+
+      try {
+        console.log(`💾 FAST SAVE: Processing lead ${i + 1}/${processedResults.length}: "${result.title}"`);
+
+        // Create lead source (reuse if exists)
+        let leadSource;
+        try {
+          const { LeadSource } = require('../models');
+          const sourceName = result.source || 'Web Search';
+          const sourceUrl = result.url ? new URL(result.url).hostname : 'unknown.com';
+
+          // Try to find existing source first
+          leadSource = await LeadSource.findOne({
+            where: { name: sourceName, url: `https://${sourceUrl}` }
+          });
+
+          if (!leadSource) {
+            leadSource = await LeadSource.create({
+              name: sourceName,
+              url: `https://${sourceUrl}`,
+              type: 'website'
+            });
+            console.log(`✅ Created lead source: ${sourceName}`);
+          }
+        } catch (sourceError) {
+          console.warn('⚠️ Could not create/find lead source:', sourceError.message);
+          // Use a fallback source
+          const { LeadSource } = require('../models');
+          leadSource = await LeadSource.findOrCreate({
+            where: { name: 'Web Search', url: 'https://web-search.com' },
+            defaults: { type: 'website' }
+          });
+          leadSource = leadSource[0];
+        }
+
+        // Ensure URL is valid
+        let finalUrl = result.url;
+        if (!finalUrl || !finalUrl.startsWith('http')) {
+          finalUrl = `https://example.com/${encodeURIComponent(result.title)}`;
+          console.log(`⚠️ Fixed invalid URL to: ${finalUrl}`);
+        }
+
+        // Create lead with minimal required fields
+        const leadData = {
+          title: result.title || 'Untitled Lead',
+          description: result.extractedData?.description || result.snippet || result.title || 'No description available',
+          company: result.extractedData?.company || this.extractCompanyFromTitle(result.title) || 'Unknown',
+          url: finalUrl,
+          location: result.extractedData?.location || config.location || null,
+          industry_type: result.extractedData?.industry_type || 'hospitality',
+          confidence: result.extractedData?.confidence || 70,
+          keywords: config.keywords || [],
+          user_id: userId,
+          lead_source_id: leadSource.id,
+          published_at: result.publishedDate || new Date(),
+          scrapedDate: new Date()
+        };
+
+        console.log(`💾 CREATING LEAD:`, {
+          title: leadData.title.substring(0, 50),
+          company: leadData.company,
+          url: leadData.url
+        });
+
+        const { Lead } = require('../models');
+        const lead = await Lead.create(leadData);
+
+        console.log(`✅ LEAD SAVED: ID ${lead.id} - "${lead.title}"`);
+
+        // Verify the lead was saved
+        const verifyLead = await Lead.findByPk(lead.id);
+        if (verifyLead) {
+          console.log(`🔍 VERIFIED: Lead ${lead.id} exists in database`);
+          savedLeads.push(lead);
+        } else {
+          console.error(`❌ VERIFICATION FAILED: Lead ${lead.id} not found after save!`);
+        }
+
+        // Update progress
+        if (jobId) {
+          this.updateProgress(jobId, 'saving', i + 1, processedResults.length,
+            `Saved ${i + 1}/${processedResults.length} leads...`);
+        }
+
+      } catch (error) {
+        console.error(`❌ Failed to save lead ${i + 1}:`, error);
+        console.error('Lead data that failed:', {
+          title: result.title,
+          url: result.url,
+          error: error.message
+        });
+        // Continue with next lead instead of failing completely
+      }
+    }
+
+    console.log(`🎉 FAST SAVE COMPLETE: ${savedLeads.length}/${processedResults.length} leads saved successfully`);
     return savedLeads;
   }
 

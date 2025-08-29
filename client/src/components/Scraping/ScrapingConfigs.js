@@ -286,6 +286,26 @@ const ScrapingConfigs = () => {
     }
   };
 
+  // Test lead saving functionality
+  const testLeadSave = async () => {
+    try {
+      console.log('🧪 Testing lead save functionality...');
+      const response = await axios.post('/api/scraping/test-lead-save');
+      console.log('✅ Test lead save result:', response.data);
+
+      if (response.data.success) {
+        toast.success(`Test lead saved! ID: ${response.data.leadId}`);
+        // Refresh debug info
+        debugDatabaseLeads();
+      } else {
+        toast.error('Test lead save failed');
+      }
+    } catch (error) {
+      console.error('❌ Test lead save error:', error);
+      toast.error(`Test failed: ${error.response?.data?.error || error.message}`);
+    }
+  };
+
   // Progress polling function
   const startProgressPolling = (jobId) => {
     console.log(`🔄 STARTING PROGRESS POLLING for jobId: ${jobId} (every 10 seconds)`);
@@ -526,6 +546,12 @@ const ScrapingConfigs = () => {
               <option key={group} value={group}>{group}</option>
             ))}
           </select>
+          <button
+            onClick={testLeadSave}
+            className="inline-flex items-center px-3 py-2 border border-blue-300 rounded-md text-sm font-medium text-blue-700 bg-blue-50 hover:bg-blue-100 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 mr-2"
+          >
+            🧪 Test Lead Save
+          </button>
           <button
             onClick={debugDatabaseLeads}
             className="inline-flex items-center px-3 py-2 border border-yellow-300 rounded-md text-sm font-medium text-yellow-700 bg-yellow-50 hover:bg-yellow-100 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-yellow-500"
