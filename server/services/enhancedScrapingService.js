@@ -4,6 +4,23 @@ const AdvancedScrapingService = require('./advancedScrapingService');
 const axios = require('axios');
 const { Lead, LeadSource } = require('../models');
 
+// Load scraping configuration
+let scrapingConfig;
+try {
+  scrapingConfig = require('../config/scraping-config');
+  console.log('✅ Enhanced Scraping Service config loaded');
+} catch (error) {
+  console.error('❌ Failed to load scraping config:', error.message);
+  scrapingConfig = {
+    apis: {
+      googleNews: { enabled: false },
+      bingNews: { enabled: false },
+      newsapi: { enabled: false }
+    },
+    antiDetection: { enabled: false, proxies: [] }
+  };
+}
+
 // Scraping Health Monitoring Service
 class ScrapingMonitor {
   constructor() {
@@ -266,7 +283,7 @@ class EnhancedScrapingService {
       this.updateProgress(finalJobId, 'scraping', 0, 2, 'Starting fast scraping...');
 
       // 1. GOOGLE SEARCH (most reliable)
-      if (this.apis.googleNews?.enabled) {
+      if (this.apis?.googleNews?.enabled) {
         console.log('🔍 Searching Google (fast mode)...');
         try {
           const googleResults = await this.searchGoogleNewsAPI(config.keywords, maxResults);
@@ -276,10 +293,12 @@ class EnhancedScrapingService {
         } catch (error) {
           console.warn('⚠️ Google failed:', error.message);
         }
+      } else {
+        console.log('⚠️ Google News API disabled (no API key)');
       }
 
       // 2. BING SEARCH (backup)
-      if (this.apis.bingNews?.enabled) {
+      if (this.apis?.bingNews?.enabled) {
         console.log('📰 Searching Bing (fast mode)...');
         try {
           const bingResults = await this.searchBingNewsAPI(config.keywords, maxResults);
@@ -288,6 +307,21 @@ class EnhancedScrapingService {
           this.updateProgress(finalJobId, 'scraping', 2, 2, `Total: ${allResults.length} results found`);
         } catch (error) {
           console.warn('⚠️ Bing failed:', error.message);
+        }
+      } else {
+        console.log('⚠️ Bing News API disabled (no API key)');
+      }
+
+      // If no APIs are enabled, try a simple web search fallback
+      if ((!this.apis?.googleNews?.enabled && !this.apis?.bingNews?.enabled) || allResults.length === 0) {
+        console.log('🔄 No APIs enabled or no results, trying web scraping fallback...');
+        try {
+          const webResults = await this.scrapeGoogleNews(config.keywords, Math.max(maxResults, 5));
+          allResults.push(...webResults.slice(0, maxResults));
+          console.log(`✅ Web scraping: ${webResults.length} results`);
+          this.updateProgress(finalJobId, 'scraping', 2, 2, `Web scraping found ${webResults.length} results`);
+        } catch (error) {
+          console.warn('⚠️ Web scraping fallback failed:', error.message);
         }
       }
 

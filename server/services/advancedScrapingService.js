@@ -3,7 +3,23 @@ const ScrapyService = require('./scrapyService');
 const DataExtractionService = require('./dataExtractionService');
 const AntiDetectionService = require('./antiDetectionService');
 const LeadVerificationService = require('./leadVerificationService');
-const scrapingConfig = require('../config/scraping-config');
+
+// Load scraping configuration
+let scrapingConfig;
+try {
+  scrapingConfig = require('../config/scraping-config');
+  console.log('✅ Advanced Scraping Service config loaded');
+} catch (error) {
+  console.error('❌ Failed to load scraping config:', error.message);
+  scrapingConfig = {
+    apis: {
+      googleNews: { enabled: false },
+      bingNews: { enabled: false },
+      newsapi: { enabled: false }
+    },
+    antiDetection: { enabled: false, proxies: [] }
+  };
+}
 
 /**
  * Advanced Scraping Service - Premium API Integration & Creative Tactics
@@ -17,19 +33,45 @@ const scrapingConfig = require('../config/scraping-config');
  */
 class AdvancedScrapingService {
   constructor() {
+    console.log('🔧 Initializing Advanced Scraping Service...');
+
     this.scrapyService = new ScrapyService();
     this.dataExtractionService = new DataExtractionService();
-    this.antiDetectionService = new AntiDetectionService(scrapingConfig);
     this.leadVerificationService = new LeadVerificationService();
-    this.config = scrapingConfig;
 
-    // API configurations from config file
-    this.apis = this.config.apis;
+    // Load scraping configuration
+    try {
+      this.config = scrapingConfig;
+      console.log('✅ Scraping config loaded successfully');
 
-    console.log('🚀 Advanced Scraping Service initialized with premium APIs');
-    console.log(`📊 APIs enabled: NewsAPI(${this.apis.newsapi.enabled}), Google News(${this.apis.googleNews.enabled}), Bing News(${this.apis.bingNews.enabled})`);
-    console.log(`🛡️ Anti-detection: ${this.config.antiDetection.enabled ? 'ENABLED' : 'DISABLED'}`);
-    console.log(`✅ Lead verification: ENABLED`);
+      // API configurations from config file
+      this.apis = this.config.apis;
+      console.log('✅ API configurations loaded');
+
+      this.antiDetectionService = new AntiDetectionService(this.config);
+      console.log('✅ Anti-detection service initialized');
+
+      console.log('🚀 Advanced Scraping Service initialized with premium APIs');
+      console.log(`📊 APIs: NewsAPI(${this.apis?.newsapi?.enabled}), Google(${this.apis?.googleNews?.enabled}), Bing(${this.apis?.bingNews?.enabled})`);
+      console.log(`🛡️ Anti-detection: ${this.config?.antiDetection?.enabled ? 'ENABLED' : 'DISABLED'}`);
+      console.log(`✅ Lead verification: ENABLED`);
+
+    } catch (error) {
+      console.error('❌ Failed to initialize Advanced Scraping Service:', error);
+      console.error('Config loading error:', error.message);
+
+      // Fallback configuration
+      this.config = {
+        apis: {
+          googleNews: { enabled: false },
+          bingNews: { enabled: false },
+          newsapi: { enabled: false }
+        },
+        antiDetection: { enabled: false, proxies: [] }
+      };
+      this.apis = this.config.apis;
+      console.log('⚠️ Using fallback configuration');
+    }
 
     // Progress tracking callback (will be set by parent service)
     this.updateProgress = null;
