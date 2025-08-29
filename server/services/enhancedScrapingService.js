@@ -4,22 +4,84 @@ const AdvancedScrapingService = require('./advancedScrapingService');
 const axios = require('axios');
 const { Lead, LeadSource } = require('../models');
 
-// Load scraping configuration
+// Load and refresh scraping configuration
 let scrapingConfig;
-try {
-  scrapingConfig = require('../config/scraping-config');
-  console.log('✅ Enhanced Scraping Service config loaded');
-} catch (error) {
-  console.error('❌ Failed to load scraping config:', error.message);
-  scrapingConfig = {
-    apis: {
-      googleNews: { enabled: false },
-      bingNews: { enabled: false },
-      newsapi: { enabled: false }
-    },
-    antiDetection: { enabled: false, proxies: [] }
-  };
+function loadScrapingConfig() {
+  try {
+    // Force reload the config to get latest environment variables
+    delete require.cache[require.resolve('../config/scraping-config')];
+    scrapingConfig = require('../config/scraping-config');
+
+    // Double-check API keys are properly loaded
+    if (scrapingConfig.apis) {
+      // Ensure NewsAPI is enabled with user's key
+      if (scrapingConfig.apis.newsapi) {
+        scrapingConfig.apis.newsapi.enabled = true;
+        if (!scrapingConfig.apis.newsapi.key || scrapingConfig.apis.newsapi.key === 'YOUR_NEWS_API_KEY') {
+          scrapingConfig.apis.newsapi.key = process.env.NEWS_API_KEY || 'c46eb3eb018b4cd5aedf3346fe6a5898';
+        }
+        console.log('✅ NewsAPI enabled with key:', scrapingConfig.apis.newsapi.key.substring(0, 10) + '...');
+      }
+
+      // Ensure Google News is enabled with user's keys
+      if (scrapingConfig.apis.googleNews) {
+        scrapingConfig.apis.googleNews.enabled = true;
+        if (!scrapingConfig.apis.googleNews.key || scrapingConfig.apis.googleNews.key === 'YOUR_GOOGLE_API_KEY') {
+          scrapingConfig.apis.googleNews.key = process.env.GOOGLE_API_KEY || 'AIzaSyDNqFmlNRMUVPTvoW1CnxIe2YWOxN9f9GE';
+        }
+        if (!scrapingConfig.apis.googleNews.searchEngineId || scrapingConfig.apis.googleNews.searchEngineId === 'YOUR_SEARCH_ENGINE_ID') {
+          scrapingConfig.apis.googleNews.searchEngineId = process.env.GOOGLE_SEARCH_ENGINE_ID || '85ac3269e22bb48d2';
+        }
+        console.log('✅ Google News API enabled with key:', scrapingConfig.apis.googleNews.key.substring(0, 10) + '...');
+      }
+
+      // Enable Bing News if key is available
+      if (scrapingConfig.apis.bingNews && process.env.BING_API_KEY) {
+        scrapingConfig.apis.bingNews.enabled = true;
+        scrapingConfig.apis.bingNews.key = process.env.BING_API_KEY;
+        console.log('✅ Bing News API enabled');
+      }
+    }
+
+    console.log('✅ Enhanced Scraping Service config loaded and refreshed');
+    return scrapingConfig;
+  } catch (error) {
+    console.error('❌ Failed to load scraping config:', error.message);
+    // Fallback with user's API keys
+    scrapingConfig = {
+      apis: {
+        newsapi: {
+          enabled: true,
+          key: 'c46eb3eb018b4cd5aedf3346fe6a5898',
+          baseUrl: 'https://newsapi.org/v2',
+          rateLimit: 100,
+          timeout: 10000
+        },
+        googleNews: {
+          enabled: true,
+          key: 'AIzaSyDNqFmlNRMUVPTvoW1CnxIe2YWOxN9f9GE',
+          searchEngineId: '85ac3269e22bb48d2',
+          baseUrl: 'https://www.googleapis.com/customsearch/v1',
+          rateLimit: 100,
+          timeout: 10000
+        },
+        bingNews: {
+          enabled: false,
+          key: process.env.BING_API_KEY || '',
+          baseUrl: 'https://api.bing.microsoft.com/v7.0/news/search',
+          rateLimit: 1000,
+          timeout: 8000
+        }
+      },
+      antiDetection: { enabled: false, proxies: [] }
+    };
+    console.log('✅ Using fallback config with user API keys');
+    return scrapingConfig;
+  }
 }
+
+// Initialize config
+scrapingConfig = loadScrapingConfig();
 
 // Scraping Health Monitoring Service
 class ScrapingMonitor {
@@ -3852,7 +3914,21 @@ class EnhancedScrapingService {
         console.log(`🔍 Found ${articles.length} potential articles, filtering for relevance...`);
 
         for (const article of articles.slice(0, maxResults * 2)) { // Get more to filter
-          if (this.isRelevantArticleContent(article, keywords) && this.isValidArticleUrl(article.url)) {
+          const isRelevant = this.isRelevantArticleContent(article, keywords);
+          const isValidUrl = this.isValidArticleUrl(article.url);
+
+          // DEBUG: Log why articles are being filtered
+          if (!isRelevant || !isValidUrl) {
+            console.log(`🔍 FILTERED: "${article.title?.substring(0, 50)}..."`);
+            console.log(`   Relevant: ${isRelevant}, Valid URL: ${isValidUrl}`);
+            if (!isRelevant) {
+              const title = (article.title || '').toLowerCase();
+              const hasKeyword = keywords.some(k => title.includes(k.toLowerCase()));
+              console.log(`   Title: "${title.substring(0, 30)}...", Has keyword: ${hasKeyword}`);
+            }
+          }
+
+          if (isRelevant && isValidUrl) {
             results.push({
               title: article.title,
               url: article.url,
@@ -3864,6 +3940,7 @@ class EnhancedScrapingService {
               relevanceScore: this.calculateKeywordRelevance(article, keywords)
             });
 
+            console.log(`✅ ACCEPTED: "${article.title?.substring(0, 50)}..."`);
             if (results.length >= maxResults) break;
           }
         }
@@ -3947,32 +4024,44 @@ class EnhancedScrapingService {
     }
   }
 
-  // CHECK IF CONTENT IS RELEVANT TO KEYWORDS
+  // CHECK IF CONTENT IS RELEVANT TO KEYWORDS (FIXED - LESS AGGRESSIVE)
   isRelevantArticleContent(article, keywords) {
     if (!article.title && !article.snippet) return false;
 
-    const text = `${article.title || ''} ${article.snippet || ''}`.toLowerCase();
-    const keywordMatches = keywords.filter(keyword =>
-      text.includes(keyword.toLowerCase())
-    );
+    const title = (article.title || '').toLowerCase();
+    const snippet = (article.snippet || '').toLowerCase();
+    const text = `${title} ${snippet}`;
 
-    // Require at least one keyword match
-    if (keywordMatches.length === 0) return false;
+    // Check if any keyword appears in the content (case-insensitive)
+    const hasKeywordMatch = keywords.some(keyword => {
+      const lowerKeyword = keyword.toLowerCase();
+      return text.includes(lowerKeyword) ||
+             // Also check for partial matches (e.g., "hotel" in "hospitality")
+             lowerKeyword.split(' ').some(word =>
+               text.includes(word) && word.length > 3
+             );
+    });
 
-    // Additional relevance checks
-    const titleLower = (article.title || '').toLowerCase();
+    // If no keyword match at all, reject
+    if (!hasKeywordMatch) return false;
 
-    // Boost relevance for articles that mention multiple keywords
-    const relevanceScore = keywordMatches.length;
-
-    // Filter out navigation elements
+    // Filter out obvious navigation elements
     if (this.isNavigationElement(article.title, article.url)) return false;
 
-    // Filter out non-article content
-    const nonArticleWords = ['navigation', 'menu', 'login', 'sign in', 'register', 'subscribe', 'privacy', 'terms', 'contact', 'about us', 'skip to'];
-    if (nonArticleWords.some(word => titleLower.includes(word))) return false;
+    // More lenient non-article filtering
+    const nonArticleWords = ['privacy policy', 'terms of use', 'terms of service', 'cookie policy', 'login', 'sign in', 'register', 'subscribe'];
+    const hasNonArticleWord = nonArticleWords.some(word => title.includes(word));
 
-    return relevanceScore > 0;
+    if (hasNonArticleWord) return false;
+
+    // Require minimum title length (relaxed for now)
+    if (title.length < 3) return false;
+
+    // Require some content substance (relaxed for now)
+    const totalContentLength = title.length + snippet.length;
+    if (totalContentLength < 5) return false;
+
+    return true;
   }
 
   // DETECT NAVIGATION AND NON-ARTICLE ELEMENTS
@@ -4131,7 +4220,16 @@ class EnhancedScrapingService {
         console.log(`🔍 Found ${articles.length} potential articles from ${source.name}, filtering...`);
 
         for (const article of articles.slice(0, maxResults)) {
-          if (this.isRelevantArticleContent(article, keywords) && this.isValidArticleUrl(article.url)) {
+          const isRelevant = this.isRelevantArticleContent(article, keywords);
+          const isValidUrl = this.isValidArticleUrl(article.url);
+
+          // DEBUG: Log why articles are being filtered
+          if (!isRelevant || !isValidUrl) {
+            console.log(`🔍 FILTERED from ${source.name}: "${article.title?.substring(0, 50)}..."`);
+            console.log(`   Relevant: ${isRelevant}, Valid URL: ${isValidUrl}`);
+          }
+
+          if (isRelevant && isValidUrl) {
             results.push({
               title: article.title,
               url: article.url,
@@ -4142,6 +4240,8 @@ class EnhancedScrapingService {
               apiSource: 'Intelligent Web Scraping',
               relevanceScore: this.calculateKeywordRelevance(article, keywords)
             });
+
+            console.log(`✅ ACCEPTED from ${source.name}: "${article.title?.substring(0, 50)}..."`);
           }
 
           if (results.length >= maxResults) break;
