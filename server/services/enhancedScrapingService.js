@@ -3821,15 +3821,15 @@ class EnhancedScrapingService {
     return results;
   }
 
-  // BASIC GOOGLE NEWS SCRAPING METHOD
+  // INTELLIGENT GOOGLE NEWS SCRAPING WITH ARTICLE DETECTION
   async scrapeGoogleNews(keywords, maxResults = 10) {
-    console.log(`🔍 Basic Google News scraping for keywords: ${keywords.join(', ')}`);
+    console.log(`🔍 Intelligent Google News scraping for keywords: ${keywords.join(', ')}`);
     const results = [];
-    const searchQuery = keywords.join(' ');
+    const searchQuery = keywords.join(' OR ');
     const searchUrl = `https://news.google.com/search?q=${encodeURIComponent(searchQuery)}&hl=en-US&gl=US&ceid=US:en`;
 
     try {
-      console.log(`🔍 Scraping Google News: ${searchUrl}`);
+      console.log(`🔍 Scraping Google News with intelligent parsing: ${searchUrl}`);
 
       const response = await axios.get(searchUrl, {
         headers: {
@@ -3838,31 +3838,38 @@ class EnhancedScrapingService {
           'Accept-Language': 'en-US,en;q=0.5',
           'Accept-Encoding': 'gzip, deflate',
           'Connection': 'keep-alive',
-          'Upgrade-Insecure-Requests': '1'
+          'Upgrade-Insecure-Requests': '1',
+          'Cache-Control': 'no-cache'
         },
-        timeout: 15000
+        timeout: 20000,
+        maxRedirects: 5
       });
 
       if (response.data) {
-        // Parse Google News HTML for articles
-        const articles = this.parseGoogleNewsHtml(response.data, keywords);
+        // Use intelligent article extraction
+        const articles = this.extractArticlesFromGoogleNews(response.data, keywords);
 
-        for (const article of articles.slice(0, maxResults)) {
-          if (this.isValidArticleUrl(article.url)) {
+        console.log(`🔍 Found ${articles.length} potential articles, filtering for relevance...`);
+
+        for (const article of articles.slice(0, maxResults * 2)) { // Get more to filter
+          if (this.isRelevantArticleContent(article, keywords) && this.isValidArticleUrl(article.url)) {
             results.push({
               title: article.title,
               url: article.url,
               snippet: article.snippet || article.title,
-              source: article.source || 'Google News',
+              source: article.source || this.extractDomain(article.url),
               publishedDate: article.publishedDate || new Date(),
               verified: false,
-              apiSource: 'Google News Scraping'
+              apiSource: 'Google News Intelligent Scraping',
+              relevanceScore: this.calculateKeywordRelevance(article, keywords)
             });
+
+            if (results.length >= maxResults) break;
           }
         }
       }
 
-      console.log(`✅ Google News scraping found ${results.length} articles`);
+      console.log(`✅ Google News scraping found ${results.length} relevant articles`);
       return results;
 
     } catch (error) {
@@ -3871,43 +3878,173 @@ class EnhancedScrapingService {
     }
   }
 
-  parseGoogleNewsHtml(html, keywords) {
+  // INTELLIGENT ARTICLE EXTRACTION FROM GOOGLE NEWS
+  extractArticlesFromGoogleNews(html, keywords) {
     const articles = [];
-    // Simple regex-based parsing for Google News articles
-    const articleRegex = /<article[^>]*>[\s\S]*?<\/article>/gi;
-    const titleRegex = /<h3[^>]*>([^<]+)<\/h3>/i;
-    const linkRegex = /<a[^>]+href=["']([^"']+)["'][^>]*>([^<]+)<\/a>/i;
-    const sourceRegex = /<div[^>]*class="[^"]*source[^"]*"[^>]*>([^<]+)<\/div>/i;
 
-    let match;
-    while ((match = articleRegex.exec(html)) !== null) {
-      const articleHtml = match[0];
+    try {
+      const $ = require('cheerio').load(html);
 
-      const titleMatch = titleRegex.exec(articleHtml);
-      const linkMatch = linkRegex.exec(articleHtml);
-      const sourceMatch = sourceRegex.exec(articleHtml);
+      // Google News article selectors (most specific to least specific)
+      const selectors = [
+        'article[data-n-tid] a[href*="/articles/"]', // Main article links
+        'article a[href*="/articles/"]', // Article links in articles
+        'div[data-n-tid] a[href*="/articles/"]', // Alternative article containers
+        'c-wiz a[href*="/articles/"]', // Google News specific containers
+        '.NiLAwe a[href*="/articles/"]', // Article link class
+        '.DY5T1d a[href*="/articles/"]' // Another article class
+      ];
 
-      if (titleMatch && linkMatch) {
-        let url = linkMatch[1];
-        // Convert Google redirect URLs to direct URLs
-        if (url.includes('google.com/url')) {
-          const urlMatch = url.match(/[?&]url=([^&]+)/);
-          if (urlMatch) {
-            url = decodeURIComponent(urlMatch[1]);
+      // Try each selector
+      for (const selector of selectors) {
+        $(selector).each((i, element) => {
+          if (articles.length >= 50) return false; // Limit to prevent memory issues
+
+          const $link = $(element);
+          const $article = $link.closest('article, div[data-n-tid], .NiLAwe');
+          const $title = $article.find('h3, h4, .ipQwMb, .DY5T1d').first();
+          const $source = $article.find('.wEwyrc, .CEMjEf, .Hn2VYe').first();
+          const $snippet = $article.find('.xBbh9, .SbNwzf, .HO8did').first();
+
+          const title = ($title.text() || $link.attr('aria-label') || $link.text() || '').trim();
+          const source = ($source.text() || '').trim();
+          const snippet = ($snippet.text() || title || '').trim();
+
+          if (title && title.length > 10) { // Only real article titles
+            let url = $link.attr('href');
+
+            // Convert Google redirect URLs to direct URLs
+            if (url && url.includes('/url?')) {
+              const urlMatch = url.match(/[?&]url=([^&]+)/);
+              if (urlMatch) {
+                url = decodeURIComponent(urlMatch[1]);
+              }
+            }
+
+            // Only add if we have a valid URL and it's not a navigation element
+            if (url && url.startsWith('http') && !this.isNavigationElement(title, url)) {
+              articles.push({
+                title: title,
+                url: url,
+                source: source || this.extractDomain(url),
+                snippet: snippet,
+                publishedDate: new Date(),
+                html: $article.html() // Keep for further processing if needed
+              });
+            }
           }
-        }
-
-        articles.push({
-          title: titleMatch[1].trim(),
-          url: url,
-          source: sourceMatch ? sourceMatch[1].trim() : 'Google News',
-          snippet: titleMatch[1].trim(),
-          publishedDate: new Date()
         });
+
+        if (articles.length > 0) break; // If we found articles with this selector, use it
       }
+
+      console.log(`🔍 Extracted ${articles.length} potential articles from Google News HTML`);
+      return articles;
+
+    } catch (error) {
+      console.warn('⚠️ Error parsing Google News HTML:', error.message);
+      return [];
+    }
+  }
+
+  // CHECK IF CONTENT IS RELEVANT TO KEYWORDS
+  isRelevantArticleContent(article, keywords) {
+    if (!article.title && !article.snippet) return false;
+
+    const text = `${article.title || ''} ${article.snippet || ''}`.toLowerCase();
+    const keywordMatches = keywords.filter(keyword =>
+      text.includes(keyword.toLowerCase())
+    );
+
+    // Require at least one keyword match
+    if (keywordMatches.length === 0) return false;
+
+    // Additional relevance checks
+    const titleLower = (article.title || '').toLowerCase();
+
+    // Boost relevance for articles that mention multiple keywords
+    const relevanceScore = keywordMatches.length;
+
+    // Filter out navigation elements
+    if (this.isNavigationElement(article.title, article.url)) return false;
+
+    // Filter out non-article content
+    const nonArticleWords = ['navigation', 'menu', 'login', 'sign in', 'register', 'subscribe', 'privacy', 'terms', 'contact', 'about us', 'skip to'];
+    if (nonArticleWords.some(word => titleLower.includes(word))) return false;
+
+    return relevanceScore > 0;
+  }
+
+  // DETECT NAVIGATION AND NON-ARTICLE ELEMENTS
+  isNavigationElement(title, url) {
+    if (!title || !url) return true;
+
+    const titleLower = title.toLowerCase();
+    const urlLower = url.toLowerCase();
+
+    // Navigation elements to filter out
+    const navElements = [
+      'skip navigation', 'skip to main', 'skip to content', 'main content',
+      'navigation', 'menu', 'login', 'sign in', 'sign out', 'register',
+      'subscribe', 'unsubscribe', 'newsletter', 'privacy policy', 'terms of use',
+      'terms of service', 'contact us', 'about us', 'help', 'support',
+      'sitemap', 'rss', 'feed', 'xml', 'api', 'search', 'advanced search',
+      'pre-markets', 'u.s. markets', 'currencies', 'cryptocurrency',
+      'markets', 'stocks', 'bonds', 'commodities', 'futures',
+      'home', 'top stories', 'latest news', 'breaking news',
+      'news', 'more news', 'all news', 'headlines', 'top headlines'
+    ];
+
+    // URL patterns that indicate navigation
+    const navUrlPatterns = [
+      /\/search/, /\/login/, /\/register/, /\/subscribe/, /\/unsubscribe/,
+      /\/privacy/, /\/terms/, /\/contact/, /\/about/, /\/help/, /\/support/,
+      /\/sitemap/, /\/feed/, /\/rss/, /\/xml/, /\/api/, /#main-content/,
+      /#skip-link/, /#navigation/, /#menu/, /javascript:/, /mailto:/
+    ];
+
+    // Check title against navigation elements
+    if (navElements.some(element => titleLower.includes(element))) return true;
+
+    // Check URL against navigation patterns
+    if (navUrlPatterns.some(pattern => pattern.test(urlLower))) return true;
+
+    // Check for very short titles (likely navigation)
+    if (title.length < 5) return true;
+
+    return false;
+  }
+
+  // CALCULATE KEYWORD RELEVANCE SCORE
+  calculateKeywordRelevance(article, keywords) {
+    const text = `${article.title || ''} ${article.snippet || ''}`.toLowerCase();
+    let score = 0;
+
+    keywords.forEach(keyword => {
+      const lowerKeyword = keyword.toLowerCase();
+
+      // Count occurrences in title (higher weight)
+      const titleMatches = (article.title || '').toLowerCase().split(lowerKeyword).length - 1;
+      score += titleMatches * 20;
+
+      // Count occurrences in snippet (lower weight)
+      const snippetMatches = (article.snippet || '').toLowerCase().split(lowerKeyword).length - 1;
+      score += snippetMatches * 10;
+
+      // Bonus for exact phrase matches
+      if (text.includes(lowerKeyword)) {
+        score += 5;
+      }
+    });
+
+    // Boost score for recent content (if we can determine)
+    if (article.publishedDate) {
+      const daysOld = (Date.now() - new Date(article.publishedDate)) / (1000 * 60 * 60 * 24);
+      if (daysOld < 7) score += 10;
+      else if (daysOld < 30) score += 5;
     }
 
-    return articles;
+    return Math.min(score, 100);
   }
 
   getAdvancedWebSources() {
@@ -3970,36 +4107,48 @@ class EnhancedScrapingService {
     const searchUrl = source.searchUrl.replace('{keywords}', encodeURIComponent(keywords.join(' ')));
 
     try {
-      console.log(`🔍 Scraping ${source.name} (attempt 1)`);
+      console.log(`🔍 Intelligently scraping ${source.name} for keywords: ${keywords.join(', ')}`);
 
       // Use direct HTTP request with user agent rotation
       const response = await axios.get(searchUrl, {
         headers: {
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
           'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
           'Accept-Language': 'en-US,en;q=0.5',
           'Accept-Encoding': 'gzip, deflate',
           'Connection': 'keep-alive',
-          'Upgrade-Insecure-Requests': '1'
+          'Upgrade-Insecure-Requests': '1',
+          'Cache-Control': 'no-cache'
         },
-        timeout: 10000
+        timeout: 15000,
+        maxRedirects: 5
       });
 
       if (response.data) {
-        // Simple HTML parsing for links
-        const links = this.extractLinksFromHtml(response.data, source.baseUrl);
-        for (const link of links.slice(0, maxResults)) {
-          results.push({
-            title: link.title || link.url,
-            url: link.url,
-            snippet: `Article from ${source.name}`,
-            source: source.name,
-            publishedDate: new Date(),
-            verified: false,
-            apiSource: 'Web Scraping'
-          });
+        // Use intelligent article extraction
+        const articles = this.extractArticlesFromWebsite(response.data, source, keywords);
+
+        console.log(`🔍 Found ${articles.length} potential articles from ${source.name}, filtering...`);
+
+        for (const article of articles.slice(0, maxResults)) {
+          if (this.isRelevantArticleContent(article, keywords) && this.isValidArticleUrl(article.url)) {
+            results.push({
+              title: article.title,
+              url: article.url,
+              snippet: article.snippet || `Article from ${source.name}`,
+              source: source.name,
+              publishedDate: article.publishedDate || new Date(),
+              verified: false,
+              apiSource: 'Intelligent Web Scraping',
+              relevanceScore: this.calculateKeywordRelevance(article, keywords)
+            });
+          }
+
+          if (results.length >= maxResults) break;
         }
       }
+
+      console.log(`✅ ${source.name} contributed ${results.length} relevant articles`);
 
     } catch (error) {
       console.warn(`⚠️ Failed to scrape ${source.name}:`, error.message);
@@ -4012,6 +4161,102 @@ class EnhancedScrapingService {
     return await this.scrapeSourceWithRotation(source, keywords, maxResults);
   }
 
+  // INTELLIGENT ARTICLE EXTRACTION FROM GENERAL WEBSITES
+  extractArticlesFromWebsite(html, source, keywords) {
+    const articles = [];
+
+    try {
+      const $ = require('cheerio').load(html);
+
+      // Comprehensive article selectors for different website structures
+      const selectors = [
+        // News/article specific selectors
+        'article a[href]', // Standard article links
+        '.article a[href]', // Article class
+        '.news-item a[href]', // News item class
+        '.post a[href]', // Blog post links
+        '.entry a[href]', // Entry links
+        '.story a[href]', // Story links
+
+        // Content-specific selectors
+        'h2 a[href], h3 a[href], h4 a[href]', // Heading links
+        '.title a[href]', // Title links
+        '.headline a[href]', // Headline links
+        '.card a[href]', // Card-based layouts
+
+        // Industry-specific selectors
+        '.project a[href]', // Construction projects
+        '.development a[href]', // Development links
+        '.hotel a[href]', // Hotel-specific content
+
+        // Generic content selectors (last resort)
+        'main a[href]', // Main content area
+        '.content a[href]', // Content area
+        '#content a[href]' // Content div
+      ];
+
+      // Try each selector
+      for (const selector of selectors) {
+        $(selector).each((i, element) => {
+          if (articles.length >= 30) return false; // Limit to prevent memory issues
+
+          const $link = $(element);
+          const $container = $link.closest('article, .article, .news-item, .post, .entry, .story, .card');
+
+          // Get title from link text or nearby heading
+          let title = $link.text().trim() || $link.attr('title') || '';
+
+          // If no title in link, look for nearby heading
+          if (!title || title.length < 5) {
+            const $heading = $container.find('h1, h2, h3, h4, .title, .headline').first();
+            title = $heading.text().trim() || title;
+          }
+
+          // Get snippet from container
+          const $snippet = $container.find('p, .summary, .excerpt, .description, .content').first();
+          const snippet = $snippet.text().trim() || title;
+
+          if (title && title.length > 8) { // Only substantial titles
+            let url = $link.attr('href');
+
+            // Convert relative URLs to absolute
+            try {
+              url = url.startsWith('http') ? url : new URL(url, source.baseUrl).href;
+            } catch {
+              return; // Skip invalid URLs
+            }
+
+            // Only add if we have a valid URL and it's not navigation
+            if (url && url.startsWith('http') && !this.isNavigationElement(title, url)) {
+              articles.push({
+                title: title.substring(0, 150), // Reasonable title length
+                url: url,
+                source: source.name,
+                snippet: snippet.substring(0, 300), // Reasonable snippet length
+                publishedDate: new Date(),
+                html: $container.html() // Keep for further processing
+              });
+            }
+          }
+        });
+
+        // If we found articles with this selector, we can break early
+        if (articles.length > 0) {
+          console.log(`🔍 Used selector "${selector}" - found ${articles.length} articles`);
+          break;
+        }
+      }
+
+      console.log(`🔍 Extracted ${articles.length} potential articles from ${source.name}`);
+      return articles;
+
+    } catch (error) {
+      console.warn(`⚠️ Error parsing ${source.name} HTML:`, error.message);
+      return [];
+    }
+  }
+
+  // LEGACY METHOD - KEPT FOR COMPATIBILITY
   extractLinksFromHtml(html, baseUrl) {
     const links = [];
     const linkRegex = /<a[^>]+href=["']([^"']+)["'][^>]*>([^<]+)<\/a>/gi;

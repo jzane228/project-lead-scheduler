@@ -8,20 +8,20 @@ module.exports = {
   // Premium API Configuration
   apis: {
     newsapi: {
-      enabled: process.env.NEWS_API_KEY ? true : false,
+      enabled: true, // Force enable with provided keys
       key: process.env.NEWS_API_KEY || 'c46eb3eb018b4cd5aedf3346fe6a5898',
       baseUrl: 'https://newsapi.org/v2',
       rateLimit: 100, // requests per day
-      timeout: 10000
+      timeout: 15000
     },
 
     googleNews: {
-      enabled: process.env.GOOGLE_API_KEY ? true : false,
+      enabled: true, // Force enable with provided keys
       key: process.env.GOOGLE_API_KEY || 'AIzaSyDNqFmlNRMUVPTvoW1CnxIe2YWOxN9f9GE',
       searchEngineId: process.env.GOOGLE_SEARCH_ENGINE_ID || '85ac3269e22bb48d2',
       baseUrl: 'https://www.googleapis.com/customsearch/v1',
       rateLimit: 100, // Google Custom Search has lower limits
-      timeout: 10000
+      timeout: 15000
     },
 
     bingNews: {
@@ -29,7 +29,7 @@ module.exports = {
       key: process.env.BING_API_KEY,
       baseUrl: 'https://api.bing.microsoft.com/v7.0/news/search',
       rateLimit: 1000,
-      timeout: 8000
+      timeout: 10000
     },
 
     deepseek: {
